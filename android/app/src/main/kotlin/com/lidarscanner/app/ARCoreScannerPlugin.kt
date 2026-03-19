@@ -15,6 +15,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.FloatBuffer
 import java.util.*
 import kotlin.collections.ArrayList
 
@@ -187,24 +188,24 @@ class ARCoreScannerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Even
             
             // Extract point cloud from depth
             frame?.acquirePointCloud()?.use { points ->
-                val buffer = points.points
+                val buffer: FloatBuffer = points.points
                 buffer.rewind()
-                
+
                 // Sample points (not all for performance)
                 val step = 10
                 var i = 0
                 while (buffer.hasRemaining() && i < buffer.remaining() / 4) {
                     if (i % step == 0) {
-                        val x = buffer.getFloat()
-                        val y = buffer.getFloat()
-                        val z = buffer.getFloat()
-                        val confidence = buffer.getFloat()
+                        val x = buffer.get()
+                        val y = buffer.get()
+                        val z = buffer.get()
+                        val confidence = buffer.get()
 
                         if (confidence > 0.5f) {
                             pointCloud.add(floatArrayOf(x, y, z))
                         }
                     } else {
-                        buffer.position(buffer.position() + 4)
+                        buffer.position(buffer.position() + 1)
                     }
                     i++
                 }

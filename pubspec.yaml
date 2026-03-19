@@ -1,0 +1,82 @@
+name: lidar_scanner_app
+description: "LiDAR Pro Scanner - Professional 3D Scanning App"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # UI
+  cupertino_icons: ^1.0.8
+  
+  # ARKit for LiDAR scanning (iOS only)
+  arkit_plugin: ^1.0.7
+  
+  # 3D model viewing
+  model_viewer_plus: ^1.7.2
+  
+  # HTTP client for API calls
+  dio: ^5.4.0
+  
+  # Local storage
+  sqflite: ^2.3.0
+  path_provider: ^2.1.1
+  
+  # State management
+  provider: ^6.1.1
+  
+  # File handling
+  path: ^1.8.3
+  
+  # Encryption
+  encrypt: ^5.0.3
+  
+  # Permissions
+  permission_handler: ^11.1.0
+  
+  # UUID generation
+  uuid: ^4.2.2
+  
+  # JSON serialization
+  json_annotation: ^4.8.1
+  
+  # Onboarding
+  smooth_page_indicator: ^1.1.0
+  
+  # Animations
+  lottie: ^3.0.0
+  animate_do: ^3.1.2
+  
+  # Icons
+  flutter_svg: ^2.0.9
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  
+  # Code generation for JSON
+  build_runner: ^2.4.7
+  json_serializable: ^6.7.1
+  
+  # App icon generator
+  flutter_launcher_icons: ^0.13.1
+
+# Flutter Launcher Icons Configuration
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icons/icon.png"
+  adaptive_icon_background: "#0A2463"
+  adaptive_icon_foreground: "assets/icons/icon.png"
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/icons/

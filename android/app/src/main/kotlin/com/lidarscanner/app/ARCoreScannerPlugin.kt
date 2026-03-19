@@ -195,11 +195,11 @@ class ARCoreScannerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler, Even
                 var i = 0
                 while (buffer.hasRemaining() && i < buffer.remaining() / 4) {
                     if (i % step == 0) {
-                        val x = buffer.float
-                        val y = buffer.float
-                        val z = buffer.float
-                        val confidence = buffer.float
-                        
+                        val x = buffer.getFloat()
+                        val y = buffer.getFloat()
+                        val z = buffer.getFloat()
+                        val confidence = buffer.getFloat()
+
                         if (confidence > 0.5f) {
                             pointCloud.add(floatArrayOf(x, y, z))
                         }

@@ -104,12 +104,11 @@ class ScanExportService {
     buffer.writeln('o $safeName');
     buffer.writeln();
 
-    // Vertices with vertex colors (OBJ extension)
+    // Vertices with REAL vertex colors (sampled from camera frame)
     for (final pt in points) {
-      // Color based on confidence: high=green, medium=yellow, low=red
-      final r = pt.confidence < 0.5 ? 1.0 : (1.0 - pt.confidence) * 2.0;
-      final g = pt.confidence > 0.5 ? 1.0 : pt.confidence * 2.0;
-      final b = 0.2;
+      final r = pt.r / 255.0;
+      final g = pt.g / 255.0;
+      final b = pt.b / 255.0;
       buffer.writeln(
         'v ${pt.x.toStringAsFixed(6)} ${pt.y.toStringAsFixed(6)} ${pt.z.toStringAsFixed(6)} '
         '${r.toStringAsFixed(3)} ${g.toStringAsFixed(3)} ${b.toStringAsFixed(3)}'
@@ -175,16 +174,11 @@ class ScanExportService {
     buffer.writeln('property uchar is_manual_pin');
     buffer.writeln('end_header');
 
-    // Vertex data
+    // Vertex data — use real RGB colors sampled from camera
     for (final pt in points) {
-      // Color by confidence
-      final r = (pt.confidence < 0.5 ? 255 : ((1.0 - pt.confidence) * 2.0 * 255).toInt()).clamp(0, 255);
-      final g = (pt.confidence > 0.5 ? 255 : (pt.confidence * 2.0 * 255).toInt()).clamp(0, 255);
-      const b = 50;
-
       buffer.writeln(
         '${pt.x.toStringAsFixed(6)} ${pt.y.toStringAsFixed(6)} ${pt.z.toStringAsFixed(6)} '
-        '${pt.confidence.toStringAsFixed(4)} $r $g $b '
+        '${pt.confidence.toStringAsFixed(4)} ${pt.r} ${pt.g} ${pt.b} '
         '${pt.sequenceNumber} ${pt.isManualPin ? 1 : 0}'
       );
     }

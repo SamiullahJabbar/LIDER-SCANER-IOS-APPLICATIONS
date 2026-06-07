@@ -227,6 +227,9 @@ final class ARSessionManager: NSObject, ARSessionDelegate {
         let sequenceNumber: Int
         let isManualPin: Bool
         let timestamp: TimeInterval
+        let r: UInt8
+        let g: UInt8
+        let b: UInt8
     }
 
     // MARK: - Session Lifecycle
@@ -443,10 +446,18 @@ final class ARSessionManager: NSObject, ARSessionDelegate {
                     return
                 }
 
+                // Sample color at screen tap position
+                let imgW = Int(frame.camera.imageResolution.width)
+                let imgH = Int(frame.camera.imageResolution.height)
+                let tapPX = Int(screenX * Float(imgW))
+                let tapPY = Int(screenY * Float(imgH))
+                let (r, g, b) = sampleColor(from: frame, at: tapPX, pxY: tapPY)
+
                 // Store as captured point
                 let point = addPointThreadSafe(
                     x: worldX, y: worldY, z: worldZ,
-                    confidence: 0.95, isManualPin: true
+                    confidence: 0.95, isManualPin: true,
+                    r: r, g: g, b: b
                 )
 
                 result([
@@ -455,7 +466,10 @@ final class ARSessionManager: NSObject, ARSessionDelegate {
                     "z": Double(point.z),
                     "confidence": Double(point.confidence),
                     "sequenceNumber": point.sequenceNumber,
-                    "isManualPin": true
+                    "isManualPin": true,
+                    "r": Int(r),
+                    "g": Int(g),
+                    "b": Int(b)
                 ] as [String: Any])
                 return
             }
@@ -488,9 +502,17 @@ final class ARSessionManager: NSObject, ARSessionDelegate {
                 let viewMatrix = frame.camera.viewMatrix(for: .portrait)
                 let worldPoint = simd_inverse(viewMatrix) * camPoint
 
+                // Sample color at screen position
+                let imgW = Int(frame.camera.imageResolution.width)
+                let imgH = Int(frame.camera.imageResolution.height)
+                let tapPX = Int(screenX * Float(imgW))
+                let tapPY = Int(screenY * Float(imgH))
+                let (r, g, b) = sampleColor(from: frame, at: tapPX, pxY: tapPY)
+
                 let point = addPointThreadSafe(
                     x: worldPoint.x, y: worldPoint.y, z: worldPoint.z,
-                    confidence: depthResult.1, isManualPin: true
+                    confidence: depthResult.1, isManualPin: true,
+                    r: r, g: g, b: b
                 )
 
                 result([
@@ -499,7 +521,10 @@ final class ARSessionManager: NSObject, ARSessionDelegate {
                     "z": Double(point.z),
                     "confidence": Double(point.confidence),
                     "sequenceNumber": point.sequenceNumber,
-                    "isManualPin": true
+                    "isManualPin": true,
+                    "r": Int(r),
+                    "g": Int(g),
+                    "b": Int(b)
                 ] as [String: Any])
                 return
             }
@@ -587,7 +612,15 @@ final class ARSessionManager: NSObject, ARSessionDelegate {
         // Sample a grid of depth points (performance: ~25 points per frame)
         let sampleCols = 5
         let sampleRows = 5
-        var newPoints: [(x: Float, y: Float, z: Float, confidence: Float)] = []
+        struct SampledPoint {
+            let x: Float; let y: Float; let z: Float
+            let confidence: Float; let pxX: Int; let pxY: Int
+        }
+        var newPoints: [SampledPoint] = []
+
+        // Map depth pixel coords → camera image coords (depth is lower-res)
+        let imgW = Int(frame.camera.imageResolution.width)
+        let imgH = Int(frame.camera.imageResolution.height)
 
         for row in 0..<sampleRows {
             for col in 0..<sampleCols {
@@ -614,6 +647,10 @@ final class ARSessionManager: NSObject, ARSessionDelegate {
 
                 guard confidence >= minConfidence else { continue }
 
+                // Map depth pixel → camera image pixel for color sampling
+                let imgPX = Int(nx * Float(imgW))
+                let imgPY = Int(ny * Float(imgH))
+
                 // Unproject to camera space
                 let imgX = nx * Float(imgRes.width)
                 let imgY = ny * Float(imgRes.height)
@@ -625,7 +662,10 @@ final class ARSessionManager: NSObject, ARSessionDelegate {
                 let camPoint = SIMD4<Float>(camX, -camY, -camZ, 1.0)
                 let worldPoint = inverseView * camPoint
 
-                newPoints.append((worldPoint.x, worldPoint.y, worldPoint.z, confidence))
+                newPoints.append(SampledPoint(
+                    x: worldPoint.x, y: worldPoint.y, z: worldPoint.z,
+                    confidence: confidence, pxX: imgPX, pxY: imgPY
+                ))
             }
         }
 
@@ -649,12 +689,16 @@ final class ARSessionManager: NSObject, ARSessionDelegate {
                 if dist < minPointDistance { continue }
             }
 
+            // Sample real RGB color from camera frame at this point
+            let (r, g, b) = sampleColor(from: frame, at: pt.pxX, pxY: pt.pxY)
+
             let captured = CapturedPoint(
                 x: pt.x, y: pt.y, z: pt.z,
                 confidence: pt.confidence,
                 sequenceNumber: sequenceNumber,
                 isManualPin: false,
-                timestamp: frame.timestamp
+                timestamp: frame.timestamp,
+                r: r, g: g, b: b
             )
             pointCloud.append(captured)
 
@@ -664,7 +708,10 @@ final class ARSessionManager: NSObject, ARSessionDelegate {
                 "z": Double(pt.z),
                 "confidence": Double(pt.confidence),
                 "sequenceNumber": sequenceNumber,
-                "isManualPin": false
+                "isManualPin": false,
+                "r": Int(r),
+                "g": Int(g),
+                "b": Int(b)
             ])
             sequenceNumber += 1
         }
@@ -713,16 +760,41 @@ final class ARSessionManager: NSObject, ARSessionDelegate {
 
     // MARK: - Private Helpers
 
+    /// Sample RGB color from camera frame at depth-map pixel coordinates.
+    /// Camera image is BGRA8888; converts to UInt8 RGB.
+    private func sampleColor(from frame: ARFrame, at pxX: Int, pxY: Int) -> (UInt8, UInt8, UInt8) {
+        let image = frame.capturedImage
+        CVPixelBufferLockBaseAddress(image, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(image, .readOnly) }
+
+        let imgW = CVPixelBufferGetWidth(image)
+        let imgH = CVPixelBufferGetHeight(image)
+        let imgX = min(max(pxX, 0), Int(imgW) - 1)
+        let imgY = min(max(pxY, 0), Int(imgH) - 1)
+
+        guard let base = CVPixelBufferGetBaseAddress(image) else {
+            return (128, 128, 128)
+        }
+        let bpr = CVPixelBufferGetBytesPerRow(image)
+        let pixel = base.advanced(by: imgY * bpr).assumingMemoryBound(to: UInt8.self)
+        let b = pixel[imgX * 4]       // BGRA layout
+        let g = pixel[imgX * 4 + 1]
+        let r = pixel[imgX * 4 + 2]
+        return (r, g, b)
+    }
+
     private func addPointThreadSafe(x: Float, y: Float, z: Float,
                                      confidence: Float,
-                                     isManualPin: Bool) -> CapturedPoint {
+                                     isManualPin: Bool,
+                                     r: UInt8 = 128, g: UInt8 = 128, b: UInt8 = 128) -> CapturedPoint {
         pointCloudLock.lock()
         let point = CapturedPoint(
             x: x, y: y, z: z,
             confidence: confidence,
             sequenceNumber: sequenceNumber,
             isManualPin: isManualPin,
-            timestamp: CACurrentMediaTime()
+            timestamp: CACurrentMediaTime(),
+            r: r, g: g, b: b
         )
         pointCloud.append(point)
         sequenceNumber += 1

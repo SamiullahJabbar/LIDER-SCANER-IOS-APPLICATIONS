@@ -17,6 +17,9 @@ ScanPoint _$ScanPointFromJson(Map<String, dynamic> json) => ScanPoint(
       capturedAt: json['captured_at'] == null
           ? null
           : DateTime.parse(json['captured_at'] as String),
+      r: (json['r'] as num?)?.toInt() ?? 128,
+      g: (json['g'] as num?)?.toInt() ?? 128,
+      b: (json['b'] as num?)?.toInt() ?? 128,
     );
 
 Map<String, dynamic> _$ScanPointToJson(ScanPoint instance) =>
@@ -29,4 +32,7 @@ Map<String, dynamic> _$ScanPointToJson(ScanPoint instance) =>
       'confidence': instance.confidence,
       'is_outlier': instance.isOutlier,
       'captured_at': instance.capturedAt?.toIso8601String(),
+      'r': instance.r,
+      'g': instance.g,
+      'b': instance.b,
     };

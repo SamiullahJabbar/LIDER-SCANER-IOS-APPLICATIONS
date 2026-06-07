@@ -183,6 +183,9 @@ class ARKitScannerService {
       final y = (data['y'] as num).toDouble();
       final z = (data['z'] as num).toDouble();
       final confidence = (data['confidence'] as num).toDouble();
+      final r = (data['r'] as num?)?.toInt() ?? 128;
+      final g = (data['g'] as num?)?.toInt() ?? 128;
+      final b = (data['b'] as num?)?.toInt() ?? 128;
 
       // Validate
       final dist = (x * x + y * y + z * z);
@@ -198,6 +201,9 @@ class ARKitScannerService {
         sequenceNumber: _sequenceNumber++,
         isManualPin: true,
         confidence: confidence,
+        r: r,
+        g: g,
+        b: b,
       );
 
       _capturedPoints.add(point);
@@ -257,6 +263,9 @@ class ARKitScannerService {
       final x = (hit['x'] as num).toDouble();
       final y = (hit['y'] as num).toDouble();
       final z = (hit['z'] as num).toDouble();
+      final r = (hit['r'] as num?)?.toInt() ?? 128;
+      final g = (hit['g'] as num?)?.toInt() ?? 128;
+      final b = (hit['b'] as num?)?.toInt() ?? 128;
 
       // Distance filter
       if (_capturedPoints.isNotEmpty) {
@@ -275,6 +284,9 @@ class ARKitScannerService {
         sequenceNumber: _sequenceNumber++,
         isManualPin: false,
         confidence: confidence,
+        r: r,
+        g: g,
+        b: b,
       );
 
       _capturedPoints.add(point);
@@ -326,6 +338,9 @@ class ARKitScannerService {
       final y = (pt['y'] as num).toDouble();
       final z = (pt['z'] as num).toDouble();
       final confidence = (pt['confidence'] as num).toDouble();
+      final r = (pt['r'] as num?)?.toInt() ?? 128;
+      final g = (pt['g'] as num?)?.toInt() ?? 128;
+      final b = (pt['b'] as num?)?.toInt() ?? 128;
 
       final point = ScanPoint.fromARFrame(
         x: x,
@@ -334,6 +349,9 @@ class ARKitScannerService {
         sequenceNumber: _sequenceNumber++,
         isManualPin: false,
         confidence: confidence,
+        r: r,
+        g: g,
+        b: b,
       );
 
       _capturedPoints.add(point);

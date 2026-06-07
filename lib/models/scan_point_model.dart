@@ -3,6 +3,7 @@
 // Uses dart:math for accurate distance calculations
 import 'package:json_annotation/json_annotation.dart';
 import 'dart:math' as math;
+import 'dart:ui' show Color;
 
 part 'scan_point_model.g.dart';
 
@@ -25,6 +26,15 @@ class ScanPoint {
   
   @JsonKey(name: 'captured_at')
   final DateTime? capturedAt;
+
+  @JsonKey(name: 'r')
+  final int r;
+
+  @JsonKey(name: 'g')
+  final int g;
+
+  @JsonKey(name: 'b')
+  final int b;
   
   ScanPoint({
     required this.x,
@@ -35,6 +45,9 @@ class ScanPoint {
     this.confidence = 1.0,
     this.isOutlier,
     this.capturedAt,
+    this.r = 128,
+    this.g = 128,
+    this.b = 128,
   });
   
   factory ScanPoint.fromJson(Map<String, dynamic> json) => 
@@ -50,6 +63,9 @@ class ScanPoint {
     required int sequenceNumber,
     bool isManualPin = false,
     double confidence = 0.95,
+    int r = 128,
+    int g = 128,
+    int b = 128,
   }) {
     return ScanPoint(
       x: x,
@@ -59,8 +75,17 @@ class ScanPoint {
       isManualPin: isManualPin,
       confidence: confidence,
       capturedAt: DateTime.now(),
+      r: r,
+      g: g,
+      b: b,
     );
   }
+  
+  /// Get color as a 0xAARRGGBB int (for painting)
+  int get colorARGB => (0xFF << 24) | ((r & 0xFF) << 16) | ((g & 0xFF) << 8) | (b & 0xFF);
+
+  /// Get color as Flutter Color
+  Color get color => Color(colorARGB);
   
   /// Calculate Euclidean distance to another point (meters)
   double distanceTo(ScanPoint other) {
@@ -74,6 +99,7 @@ class ScanPoint {
   String toString() {
     return 'ScanPoint(x: ${x.toStringAsFixed(3)}, y: ${y.toStringAsFixed(3)}, '
            'z: ${z.toStringAsFixed(3)}, seq: $sequenceNumber, manual: $isManualPin, '
-           'confidence: ${confidence.toStringAsFixed(2)})';
+           'confidence: ${confidence.toStringAsFixed(2)}, '
+           'color: rgb($r,$g,$b))';
   }
 }

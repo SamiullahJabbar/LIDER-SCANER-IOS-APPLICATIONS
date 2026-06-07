@@ -30,10 +30,14 @@ workflows:
           flutter pub get
           flutter pub run build_runner build --delete-conflicting-outputs || true
       
-      - name: Build iOS (no codesign)
+      - name: Build .ipa (no codesign)
         script: |
-          flutter build ios --release --no-codesign
+          VERSION=$(grep '^version: ' pubspec.yaml | cut -d' ' -f2 | cut -d'+' -f1)
+          BN=$(date +%Y%m%d%H%M)
+          flutter build ipa --release --no-codesign \
+            --build-name=${VERSION:-1.0.0} \
+            --build-number=${BN:-1}
     
     artifacts:
-      - build/ios/iphoneos/*.app
-      - build/ios/iphoneos/Runner.app
+      - build/ios/ipa/*.ipa
+      - build/ios/archive/*.xcarchive

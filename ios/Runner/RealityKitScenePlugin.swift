@@ -501,8 +501,8 @@ final class RealityKitSceneManager: NSObject, ARSessionDelegate {
             let length = simd_length(diff)
             let midpoint = (start + end) / 2.0
 
-            // Cylinder as line — older RealityKit API (iOS 13+)
-            let cylinder = MeshResource.generateCylinder(height: length, radius: 0.003)
+            // Cylinder as line — custom mesh for iOS 15+ compatibility
+            let cylinder = makeCylinderMesh(height: length, radius: 0.003, segments: 12)
             let line = ModelEntity(mesh: cylinder, materials: [self.lineMaterial])
             line.position = midpoint
             line.name = lineId
@@ -1096,6 +1096,102 @@ final class RealityKitSceneManager: NSObject, ARSessionDelegate {
             self?.eventHandler?.send(["type": "resumed"] as [String: Any])
         }
     }
+}
+
+
+// ============================================================================
+// MARK: - Custom Cylinder Mesh (iOS 15+ compatible)
+// ============================================================================
+
+/// Generate a cylinder mesh manually using MeshDescriptor.
+/// RealityKit's built-in `MeshResource.generateCylinder` is iOS 18+ only.
+@available(iOS 13.0, *)
+private func makeCylinderMesh(height: Float, radius: Float, segments: Int = 12) -> MeshResource {
+    var meshDesc = MeshDescriptor(name: "cylinder")
+
+    var positions: [SIMD3<Float>] = []
+    var indices: [UInt32] = []
+    var normals: [SIMD3<Float>] = []
+
+    let halfHeight = height / 2.0
+
+    // ── Side ring vertices ──────────────────────────────────
+    // Each segment has 2 vertices: top ring + bottom ring
+    // Normals point outward radially for smooth shading
+    for i in 0..<segments {
+        let angle = Float(i) / Float(segments) * 2.0 * .pi
+        let nx = cos(angle)
+        let nz = sin(angle)
+        let x = radius * nx
+        let z = radius * nz
+
+        // Top ring
+        positions.append(SIMD3<Float>(x, halfHeight, z))
+        normals.append(SIMD3<Float>(nx, 0, nz))
+
+        // Bottom ring
+        positions.append(SIMD3<Float>(x, -halfHeight, z))
+        normals.append(SIMD3<Float>(nx, 0, nz))
+    }
+
+    // ── Side triangles (2 triangles per segment) ───────────
+    for i in 0..<segments {
+        let next = (i + 1) % segments
+
+        let top0 = UInt32(i * 2)
+        let bot0 = UInt32(i * 2 + 1)
+        let top1 = UInt32(next * 2)
+        let bot1 = UInt32(next * 2 + 1)
+
+        // Triangle 1: top0 → bot0 → top1
+        indices.append(top0)
+        indices.append(bot0)
+        indices.append(top1)
+
+        // Triangle 2: top1 → bot0 → bot1
+        indices.append(top1)
+        indices.append(bot0)
+        indices.append(bot1)
+    }
+
+    // ── Cap centers ────────────────────────────────────────
+    let topCenterIndex = UInt32(positions.count)
+    positions.append(SIMD3<Float>(0, halfHeight, 0))
+    normals.append(SIMD3<Float>(0, 1, 0))
+
+    let bottomCenterIndex = UInt32(positions.count)
+    positions.append(SIMD3<Float>(0, -halfHeight, 0))
+    normals.append(SIMD3<Float>(0, -1, 0))
+
+    // ── Top cap triangles (fan) ────────────────────────────
+    for i in 0..<segments {
+        let next = (i + 1) % segments
+        let v0 = UInt32(i * 2)
+        let v1 = UInt32(next * 2)
+        indices.append(topCenterIndex)
+        indices.append(v0)
+        indices.append(v1)
+    }
+
+    // ── Bottom cap triangles (fan, reversed winding) ───────
+    for i in 0..<segments {
+        let next = (i + 1) % segments
+        let v0 = UInt32(i * 2 + 1)
+        let v1 = UInt32(next * 2 + 1)
+        indices.append(bottomCenterIndex)
+        indices.append(v1)
+        indices.append(v0)
+    }
+
+    meshDesc.positions = MeshBuffer(positions)
+    meshDesc.normals = MeshBuffer(normals)
+    meshDesc.primitives = .triangles(indices)
+
+    guard let mesh = try? MeshResource.generate(from: [meshDesc]) else {
+        // Fallback to a simple box
+        return MeshResource.generateBox(width: radius * 2, height: height, depth: radius * 2)
+    }
+    return mesh
 }
 
 

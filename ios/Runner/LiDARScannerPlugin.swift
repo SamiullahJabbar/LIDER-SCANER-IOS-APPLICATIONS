@@ -425,13 +425,13 @@ final class ARSessionManager: NSObject, ARSessionDelegate {
         let screenPoint = CGPoint(x: CGFloat(screenX), y: CGFloat(screenY))
 
         // 1) Try real raycast (iOS 14+) — most accurate
-        if let query = frame.raycastQuery(
+        let query = frame.raycastQuery(
             from: screenPoint,
             allowing: .estimatedPlane,
             alignment: .any
-        ) {
-            let results = session.raycast(query)
-            if let hit = results.first {
+        )
+        let results = session.raycast(query)
+        if let hit = results.first {
                 let col3 = hit.worldTransform.columns.3
                 let worldX = col3.x
                 let worldY = col3.y

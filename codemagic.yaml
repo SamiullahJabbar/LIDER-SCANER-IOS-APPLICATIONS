@@ -1,27 +1,15 @@
 # Codemagic CI/CD — LiDAR Pro Scanner
-# Bas .ipa build chahiye, kuch extra nahi!
-#
-# Setup:
-#   1. Push yeh file repo mein
-#   2. Codemagic mein repo connect karo
-#   3. iOS signing: Codemagic UI → Code Signing Identities
-#      (Upload karo apna distribution certificate + provisioning profile)
-#   4. Build run karo → .ipa milega artifacts mein
+# Bina Apple ID ke .app build! (sign nahi ho sakta bina account ke)
 
 workflows:
   ios-build:
-    name: "iOS Build (.ipa)"
+    name: "iOS Build (no codesign)"
     instance_type: mac_mini_m2
     
     environment:
       flutter: stable
       xcode: latest
       cocoapods: default
-      
-      # Code signing via Codemagic UI
-      ios_signing:
-        distribution_type: ad_hoc
-        bundle_identifier: com.lidarscanner.lidarScannerApp
     
     cache:
       cache_paths:
@@ -42,15 +30,10 @@ workflows:
           flutter pub get
           flutter pub run build_runner build --delete-conflicting-outputs || true
       
-      - name: Setup Code Signing
+      - name: Build iOS (no codesign)
         script: |
-          xcode-project use-profiles
-      
-      - name: Build .ipa
-        script: |
-          VERSION=$(grep '^version: ' pubspec.yaml | cut -d' ' -f2 | cut -d'+' -f1)
-          BN=$(date +%Y%m%d%H%M)
-          flutter build ipa --release --build-name=${VERSION:-1.0.0} --build-number=${BN:-1}
+          flutter build ios --release --no-codesign
     
     artifacts:
-      - build/ios/ipa/*.ipa
+      - build/ios/iphoneos/*.app
+      - build/ios/iphoneos/Runner.app

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../utils/app_colors.dart';
 import '../providers/theme_provider.dart';
-import '../services/database_service.dart';
-import '../models/scan_model.dart';
+import '../services/local_scan_storage_service.dart';
+import '../providers/local_scan_provider.dart';
 
 class ScanHistoryScreen extends StatefulWidget {
   const ScanHistoryScreen({super.key});
@@ -13,24 +13,31 @@ class ScanHistoryScreen extends StatefulWidget {
 }
 
 class _ScanHistoryScreenState extends State<ScanHistoryScreen> {
-  final DatabaseService _db = DatabaseService.instance;
-  List<ScanModel> _allScans = [];
-  List<ScanModel> _filteredScans = [];
+  List<ScanSession> _allScans = [];
+  List<ScanSession> _filteredScans = [];
   bool _isLoading = true;
   String _selectedFilter = 'All';
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _loadScans();
   }
+  
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   Future<void> _loadScans() async {
     setState(() => _isLoading = true);
-    final scans = await _db.getAllScans();
+    final provider = context.read<LocalScanProvider>();
+    await provider.loadScanHistory();
     setState(() {
-      _allScans = scans;
-      _filteredScans = scans;
+      _allScans = provider.scanHistory;
+      _applyFilter();
       _isLoading = false;
     });
   }
@@ -38,14 +45,33 @@ class _ScanHistoryScreenState extends State<ScanHistoryScreen> {
   void _filterScans(String filter) {
     setState(() {
       _selectedFilter = filter;
-      if (filter == 'All') {
-        _filteredScans = _allScans;
-      } else if (filter == 'Uploaded') {
-        _filteredScans = _allScans.where((scan) => scan.isUploaded).toList();
-      } else if (filter == 'Local') {
-        _filteredScans = _allScans.where((scan) => !scan.isUploaded).toList();
-      }
+      _applyFilter();
     });
+  }
+  
+  void _applyFilter() {
+    List<ScanSession> filtered;
+    if (_selectedFilter == 'All') {
+      filtered = _allScans;
+    } else if (_selectedFilter == 'Completed') {
+      filtered = _allScans.where((s) => s.status == ScanStatus.completed).toList();
+    } else if (_selectedFilter == 'Exported') {
+      filtered = _allScans.where((s) => s.status == ScanStatus.exported).toList();
+    } else {
+      filtered = _allScans;
+    }
+    
+    // Apply search
+    final query = _searchController.text.trim().toLowerCase();
+    if (query.isNotEmpty) {
+      filtered = filtered.where((s) {
+        final roomType = s.roomType ?? '';
+        return s.name.toLowerCase().contains(query) ||
+            roomType.toLowerCase().contains(query);
+      }).toList();
+    }
+    
+    _filteredScans = filtered;
   }
 
   @override
@@ -120,7 +146,7 @@ class _ScanHistoryScreenState extends State<ScanHistoryScreen> {
           ),
           IconButton(
             onPressed: () {
-              // TODO: Search functionality
+              _showSearchDialog();
             },
             icon: Icon(
               Icons.search_rounded,
@@ -143,9 +169,9 @@ class _ScanHistoryScreenState extends State<ScanHistoryScreen> {
         children: [
           _buildFilterChip('All', cardColor, textColor),
           const SizedBox(width: 12),
-          _buildFilterChip('Uploaded', cardColor, textColor),
+          _buildFilterChip('Completed', cardColor, textColor),
           const SizedBox(width: 12),
-          _buildFilterChip('Local', cardColor, textColor),
+          _buildFilterChip('Exported', cardColor, textColor),
         ],
       ),
     );
@@ -164,8 +190,8 @@ class _ScanHistoryScreenState extends State<ScanHistoryScreen> {
           boxShadow: [
             BoxShadow(
               color: isSelected
-                  ? AppColors.primaryBlue.withOpacity(0.3)
-                  : Colors.black.withOpacity(0.05),
+                  ? AppColors.primaryBlue.withValues(alpha: 0.3)
+                  : Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -201,7 +227,7 @@ class _ScanHistoryScreenState extends State<ScanHistoryScreen> {
   }
 
   Widget _buildScanCard(
-    ScanModel scan,
+    ScanSession scan,
     Color cardColor,
     Color textColor,
     Color subtitleColor,
@@ -213,7 +239,7 @@ class _ScanHistoryScreenState extends State<ScanHistoryScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -226,7 +252,7 @@ class _ScanHistoryScreenState extends State<ScanHistoryScreen> {
             Navigator.pushNamed(
               context,
               '/scan-detail',
-              arguments: {'scan': scan},
+              arguments: {'session': scan},
             );
           },
           borderRadius: BorderRadius.circular(20),
@@ -280,13 +306,13 @@ class _ScanHistoryScreenState extends State<ScanHistoryScreen> {
                               ),
                               const SizedBox(width: 16),
                               Icon(
-                                Icons.access_time_rounded,
+                                Icons.room_outlined,
                                 size: 14,
                                 color: subtitleColor,
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                '${scan.createdAt.hour}:${scan.createdAt.minute.toString().padLeft(2, '0')}',
+                                scan.roomType ?? '—',
                                 style: TextStyle(
                                   fontSize: 13,
                                   color: subtitleColor,
@@ -297,13 +323,18 @@ class _ScanHistoryScreenState extends State<ScanHistoryScreen> {
                         ],
                       ),
                     ),
+                    // Status icon
                     Icon(
-                      scan.isUploaded
+                      scan.status == ScanStatus.exported
                           ? Icons.cloud_done_rounded
-                          : Icons.cloud_upload_outlined,
-                      color: scan.isUploaded
-                          ? AppColors.success
-                          : AppColors.mediumGray,
+                          : scan.status == ScanStatus.completed
+                              ? Icons.check_circle_rounded
+                              : Icons.pending_rounded,
+                      color: scan.status == ScanStatus.exported
+                          ? AppColors.accentBlue
+                          : scan.status == ScanStatus.completed
+                              ? AppColors.success
+                              : AppColors.mediumGray,
                       size: 28,
                     ),
                   ],
@@ -315,16 +346,16 @@ class _ScanHistoryScreenState extends State<ScanHistoryScreen> {
                       child: _buildInfoChip(
                         icon: Icons.high_quality_rounded,
                         label: 'Quality',
-                        value: '${(scan.quality * 100).toInt()}%',
-                        color: _getQualityColor(scan.quality),
+                        value: '${(scan.qualityScore * 100).toInt()}%',
+                        color: _getQualityColor(scan.qualityScore),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: _buildInfoChip(
-                        icon: Icons.storage_rounded,
-                        label: 'Size',
-                        value: '${(scan.quality * 50).toStringAsFixed(1)} MB',
+                        icon: Icons.scatter_plot_rounded,
+                        label: 'Points',
+                        value: '${scan.pointCount}',
                         color: AppColors.lavender,
                       ),
                     ),
@@ -347,7 +378,7 @@ class _ScanHistoryScreenState extends State<ScanHistoryScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -426,6 +457,43 @@ class _ScanHistoryScreenState extends State<ScanHistoryScreen> {
           ),
         ],
       ),
+    );
+  }
+  
+  void _showSearchDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Search Scans'),
+          content: TextField(
+            controller: _searchController,
+            decoration: const InputDecoration(
+              hintText: 'Search by name or room type...',
+              prefixIcon: Icon(Icons.search),
+            ),
+            onChanged: (_) {
+              setState(() {
+                _applyFilter();
+              });
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                _searchController.clear();
+                setState(() => _applyFilter());
+                Navigator.pop(ctx);
+              },
+              child: const Text('Clear'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Done'),
+            ),
+          ],
+        );
+      },
     );
   }
 }

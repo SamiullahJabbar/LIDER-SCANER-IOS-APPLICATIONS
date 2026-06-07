@@ -3,8 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 import '../utils/app_colors.dart';
 import '../providers/theme_provider.dart';
-import '../services/database_service.dart';
-import '../models/scan_model.dart';
+import '../services/local_scan_storage_service.dart';
+import '../services/device_detection_service.dart';
 
 class ScanQualityScreen extends StatefulWidget {
   const ScanQualityScreen({super.key});
@@ -28,14 +28,37 @@ class _ScanQualityScreenState extends State<ScanQualityScreen> {
       final scanName = args['scanName'] ?? 'New Scan';
       final roomType = args['roomType'] ?? 'Room';
 
-      // Create scan model
-      final scan = ScanModel(
+      final storage = LocalScanStorageService.instance;
+
+      final deviceDetection = DeviceDetectionService.instance;
+      final deviceCapability = await deviceDetection.detectDeviceCapability();
+      final deviceModel = await deviceDetection.getDeviceModel();
+
+      // Create a local scan session
+      final session = await storage.createSession(
         id: const Uuid().v4(),
         name: scanName,
-        createdAt: DateTime.now(),
-        quality: coverage / 100,
-        filePath: '/scans/${const Uuid().v4()}.glb',
-        isUploaded: false,
+        roomType: roomType,
+        deviceType: deviceCapability.backendValue,
+        deviceModel: deviceModel,
+      );
+
+      // Complete the session with scan metrics
+      final completedSession = ScanSession(
+        id: session.id,
+        name: session.name,
+        roomType: session.roomType,
+        createdAt: session.createdAt,
+        completedAt: DateTime.now(),
+        status: ScanStatus.completed,
+        pointCount: points,
+        qualityScore: coverage / 100,
+        coveragePercent: coverage,
+        stabilityScore: 0.85,
+        durationSeconds: duration,
+        deviceType: session.deviceType,
+        deviceModel: session.deviceModel,
+        segments: session.segments,
         metadata: {
           'points': points,
           'duration': duration,
@@ -44,8 +67,16 @@ class _ScanQualityScreenState extends State<ScanQualityScreen> {
         },
       );
 
-      // Save to database
-      await DatabaseService.instance.createScan(scan);
+      // Save to local database
+      await storage.completeSession(
+        sessionId: completedSession.id,
+        points: [],
+        qualityScore: completedSession.qualityScore,
+        coveragePercent: completedSession.coveragePercent,
+        stabilityScore: completedSession.stabilityScore,
+        durationSeconds: completedSession.durationSeconds,
+        segments: completedSession.segments,
+      );
 
       // Navigate to preview screen
       if (mounted) {
@@ -53,7 +84,7 @@ class _ScanQualityScreenState extends State<ScanQualityScreen> {
           context,
           '/scan-preview',
           arguments: {
-            'scan': scan,
+            'scan': completedSession,
             'coverage': coverage,
             'points': points,
             'duration': duration,
@@ -198,7 +229,7 @@ class _ScanQualityScreenState extends State<ScanQualityScreen> {
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -215,7 +246,7 @@ class _ScanQualityScreenState extends State<ScanQualityScreen> {
                 child: CircularProgressIndicator(
                   value: score / 100,
                   strokeWidth: 12,
-                  backgroundColor: color.withOpacity(0.1),
+                  backgroundColor: color.withValues(alpha: 0.1),
                   valueColor: AlwaysStoppedAnimation<Color>(color),
                 ),
               ),
@@ -246,7 +277,7 @@ class _ScanQualityScreenState extends State<ScanQualityScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -282,7 +313,7 @@ class _ScanQualityScreenState extends State<ScanQualityScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -323,7 +354,7 @@ class _ScanQualityScreenState extends State<ScanQualityScreen> {
             aspectRatio: 16 / 9,
             child: Container(
               decoration: BoxDecoration(
-                color: AppColors.lightGray.withOpacity(0.3),
+                color: AppColors.lightGray.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: CustomPaint(
@@ -420,7 +451,7 @@ class _ScanQualityScreenState extends State<ScanQualityScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -432,7 +463,7 @@ class _ScanQualityScreenState extends State<ScanQualityScreen> {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -479,7 +510,7 @@ class _ScanQualityScreenState extends State<ScanQualityScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -551,7 +582,7 @@ class _ScanQualityScreenState extends State<ScanQualityScreen> {
         color: cardColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, -4),
           ),
@@ -614,7 +645,7 @@ class _ScanQualityScreenState extends State<ScanQualityScreen> {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primaryBlue.withOpacity(0.3),
+                      color: AppColors.primaryBlue.withValues(alpha: 0.3),
                       blurRadius: 15,
                       offset: const Offset(0, 8),
                     ),
@@ -748,11 +779,11 @@ class CoverageMapPainter extends CustomPainter {
         Color color;
         
         if (random < coverage * 0.7) {
-          color = AppColors.success.withOpacity(0.6);
+          color = AppColors.success.withValues(alpha: 0.6);
         } else if (random < coverage * 0.9) {
-          color = AppColors.warning.withOpacity(0.6);
+          color = AppColors.warning.withValues(alpha: 0.6);
         } else {
-          color = AppColors.error.withOpacity(0.3);
+          color = AppColors.error.withValues(alpha: 0.3);
         }
 
         paint.color = color;

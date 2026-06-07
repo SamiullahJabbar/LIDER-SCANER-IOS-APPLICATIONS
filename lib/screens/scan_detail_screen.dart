@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../utils/app_colors.dart';
 import '../providers/theme_provider.dart';
-import '../models/scan_model.dart';
-import '../services/database_service.dart';
+import '../services/local_scan_storage_service.dart';
+import '../services/scan_export_service.dart';
+import '../models/scan_point_model.dart';
+import '../providers/local_scan_provider.dart';
 
 class ScanDetailScreen extends StatefulWidget {
   const ScanDetailScreen({super.key});
@@ -15,7 +17,6 @@ class ScanDetailScreen extends StatefulWidget {
 class _ScanDetailScreenState extends State<ScanDetailScreen> {
   final _nameController = TextEditingController();
   final _notesController = TextEditingController();
-  bool _isEditing = false;
 
   @override
   void dispose() {
@@ -24,9 +25,9 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
     super.dispose();
   }
 
-  void _showEditDialog(ScanModel scan) {
+  void _showEditDialog(ScanSession scan) {
     _nameController.text = scan.name;
-    _notesController.text = scan.metadata?['notes'] ?? '';
+    _notesController.text = scan.metadata['notes'] ?? '';
 
     showDialog(
       context: context,
@@ -61,18 +62,14 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              final updatedScan = scan.copyWith(
-                name: _nameController.text,
-                metadata: {
-                  ...?scan.metadata,
-                  'notes': _notesController.text,
-                },
-              );
-              await DatabaseService.instance.updateScan(updatedScan);
+              final provider = this.context.read<LocalScanProvider>();
+              final nav = Navigator.of(context);
+              final messenger = ScaffoldMessenger.of(this.context);
+              await provider.renameSession(scan.id, _nameController.text);
               if (mounted) {
-                Navigator.pop(context);
+                nav.pop();
                 setState(() {});
-                ScaffoldMessenger.of(context).showSnackBar(
+                messenger.showSnackBar(
                   SnackBar(
                     content: const Text('Scan updated successfully'),
                     backgroundColor: AppColors.success,
@@ -97,7 +94,7 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
     );
   }
 
-  void _showDeleteDialog(ScanModel scan) {
+  void _showDeleteDialog(ScanSession scan) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -111,11 +108,14 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              await DatabaseService.instance.deleteScan(scan.id);
+              final provider = this.context.read<LocalScanProvider>();
+              final nav = Navigator.of(this.context);
+              final messenger = ScaffoldMessenger.of(this.context);
+              await provider.deleteSession(scan.id);
               if (mounted) {
-                Navigator.pop(context);
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
+                nav.pop();
+                nav.pop();
+                messenger.showSnackBar(
                   SnackBar(
                     content: const Text('Scan deleted'),
                     backgroundColor: AppColors.error,
@@ -140,7 +140,7 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
     );
   }
 
-  void _showShareOptions(ScanModel scan) {
+  void _showShareOptions(ScanSession scan) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -173,7 +173,7 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Text(
-                  'Share Scan',
+                  'Share / Export Scan',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
@@ -182,11 +182,41 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              _buildShareOption(Icons.email_rounded, 'Send via Email', isDark),
-              _buildShareOption(Icons.link_rounded, 'Copy Link', isDark),
-              _buildShareOption(Icons.qr_code_rounded, 'QR Code', isDark),
-              _buildShareOption(Icons.file_download_rounded, 'Export as OBJ', isDark),
-              _buildShareOption(Icons.file_download_rounded, 'Export as FBX', isDark),
+              _buildShareOption(
+                Icons.file_download_rounded,
+                'Export as OBJ',
+                'Universal 3D format',
+                isDark,
+                () => _exportAndShare(scan, ExportFormat.obj),
+              ),
+              _buildShareOption(
+                Icons.file_download_rounded,
+                'Export as PLY',
+                'Point cloud with confidence data',
+                isDark,
+                () => _exportAndShare(scan, ExportFormat.ply),
+              ),
+              _buildShareOption(
+                Icons.table_chart_rounded,
+                'Export as CSV',
+                'Spreadsheet format',
+                isDark,
+                () => _exportAndShare(scan, ExportFormat.csv),
+              ),
+              _buildShareOption(
+                Icons.data_object_rounded,
+                'Export Metadata (JSON)',
+                'Scan info and statistics',
+                isDark,
+                () => _exportAndShare(scan, ExportFormat.json),
+              ),
+              _buildShareOption(
+                Icons.folder_zip_rounded,
+                'Export Full Bundle',
+                'All formats (OBJ + PLY + JSON)',
+                isDark,
+                () => _exportBundle(scan),
+              ),
               const SizedBox(height: 20),
             ],
           ),
@@ -195,7 +225,175 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
     );
   }
 
-  Widget _buildShareOption(IconData icon, String label, bool isDark) {
+  Future<void> _exportAndShare(ScanSession scan, ExportFormat format) async {
+    final origin = ScanExportService.getShareOrigin(context);
+    Navigator.pop(context); // close bottom sheet
+
+    // Show loading
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+            const SizedBox(width: 12),
+            Text('Exporting as ${format.name.toUpperCase()}...'),
+          ],
+        ),
+        backgroundColor: AppColors.accentBlue,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 10),
+      ),
+    );
+
+    try {
+      // Load points from encrypted storage
+      List<ScanPoint> points = [];
+      if (scan.filePath != null && scan.filePath!.isNotEmpty) {
+        points = await LocalScanStorageService.instance.loadPointCloud(scan.filePath!);
+      }
+
+      if (points.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('No point cloud data available for this scan'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+        return;
+      }
+
+      final result = await ScanExportService.instance.exportAndShare(
+        format: format,
+        sessionId: scan.id,
+        scanName: scan.name,
+        points: points,
+        session: scan,
+        sharePositionOrigin: origin,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ Exported ${format.name.toUpperCase()} (${result.fileSizeFormatted})'),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Export failed: $e'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
+  }
+
+  Future<void> _exportBundle(ScanSession scan) async {
+    final origin = ScanExportService.getShareOrigin(context);
+    Navigator.pop(context); // close bottom sheet
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+            SizedBox(width: 12),
+            Text('Exporting full bundle...'),
+          ],
+        ),
+        backgroundColor: AppColors.accentBlue,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        duration: const Duration(seconds: 10),
+      ),
+    );
+
+    try {
+      List<ScanPoint> points = [];
+      if (scan.filePath != null && scan.filePath!.isNotEmpty) {
+        points = await LocalScanStorageService.instance.loadPointCloud(scan.filePath!);
+      }
+
+      if (points.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('No point cloud data available for this scan'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+        return;
+      }
+
+      final results = await ScanExportService.instance.exportBundle(
+        sessionId: scan.id,
+        scanName: scan.name,
+        points: points,
+        session: scan,
+        sharePositionOrigin: origin,
+      );
+
+      final totalSize = results.fold<int>(0, (sum, r) => sum + r.fileSize);
+      final sizeStr = totalSize < 1024 * 1024
+          ? '${(totalSize / 1024).toStringAsFixed(1)} KB'
+          : '${(totalSize / (1024 * 1024)).toStringAsFixed(1)} MB';
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('✅ Bundle exported — ${results.length} files ($sizeStr)'),
+          backgroundColor: AppColors.success,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Bundle export failed: $e'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+    }
+  }
+
+  Future<void> _navigateTo3DViewer(ScanSession scan) async {
+    List<ScanPoint> points = [];
+    if (scan.filePath != null && scan.filePath!.isNotEmpty) {
+      try {
+        points = await LocalScanStorageService.instance.loadPointCloud(scan.filePath!);
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    Navigator.pushNamed(context, '/3d-viewer', arguments: {
+      'session': scan,
+      'points': points,
+    });
+  }
+
+  Widget _buildShareOption(IconData icon, String label, String subtitle, bool isDark, VoidCallback onTap) {
     return ListTile(
       leading: Icon(icon, color: AppColors.accentBlue),
       title: Text(
@@ -206,19 +404,12 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
           color: isDark ? Colors.white : AppColors.charcoal,
         ),
       ),
-      onTap: () {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('$label - Coming soon'),
-            backgroundColor: AppColors.accentBlue,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        );
-      },
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(fontSize: 12, color: AppColors.mediumGray),
+      ),
+      trailing: Icon(Icons.arrow_forward_ios_rounded, color: AppColors.mediumGray, size: 16),
+      onTap: onTap,
     );
   }
 
@@ -232,7 +423,7 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
     final subtitleColor = isDark ? Colors.white70 : AppColors.darkGray;
 
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>? ?? {};
-    final scan = args['scan'] as ScanModel?;
+    final scan = args['session'] as ScanSession?;
 
     if (scan == null) {
       return Scaffold(
@@ -260,7 +451,7 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
                   const SizedBox(height: 20),
 
                   // 3D Preview Thumbnail
-                  _build3DPreview(cardColor),
+                  _build3DPreview(scan, cardColor),
 
                   const SizedBox(height: 24),
 
@@ -329,15 +520,17 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
     );
   }
 
-  Widget _build3DPreview(Color cardColor) {
-    return Container(
+  Widget _build3DPreview(ScanSession scan, Color cardColor) {
+    return GestureDetector(
+      onTap: () => _navigateTo3DViewer(scan),
+      child: Container(
       height: 200,
       decoration: BoxDecoration(
         color: cardColor,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -350,7 +543,7 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
             child: Icon(
               Icons.view_in_ar_rounded,
               size: 80,
-              color: AppColors.accentBlue.withOpacity(0.3),
+              color: AppColors.accentBlue.withValues(alpha: 0.3),
             ),
           ),
           // Play Button Overlay
@@ -363,7 +556,7 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.accentBlue.withOpacity(0.3),
+                    color: AppColors.accentBlue.withValues(alpha: 0.3),
                     blurRadius: 15,
                     offset: const Offset(0, 8),
                   ),
@@ -383,7 +576,7 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.6),
+                color: Colors.black.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Text(
@@ -398,15 +591,27 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
           ),
         ],
       ),
+    ),
     );
   }
 
   Widget _buildScanInfoCard(
-    ScanModel scan,
+    ScanSession scan,
     Color cardColor,
     Color textColor,
     Color subtitleColor,
   ) {
+    final statusColor = scan.status == ScanStatus.completed
+        ? AppColors.success
+        : scan.status == ScanStatus.exported
+            ? AppColors.accentBlue
+            : AppColors.warning;
+    final statusLabel = scan.status == ScanStatus.completed
+        ? 'Completed'
+        : scan.status == ScanStatus.exported
+            ? 'Exported'
+            : 'Pending';
+    
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -414,7 +619,7 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -455,7 +660,7 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      scan.metadata?['roomType'] ?? 'Room',
+                      scan.roomType ?? '—',
                       style: TextStyle(
                         fontSize: 13,
                         color: subtitleColor,
@@ -467,26 +672,28 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: scan.isUploaded
-                      ? AppColors.success.withOpacity(0.1)
-                      : AppColors.warning.withOpacity(0.1),
+                  color: statusColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      scan.isUploaded ? Icons.cloud_done_rounded : Icons.cloud_off_rounded,
+                      scan.status == ScanStatus.completed
+                          ? Icons.check_circle_rounded
+                          : scan.status == ScanStatus.exported
+                              ? Icons.cloud_done_rounded
+                              : Icons.pending_rounded,
                       size: 14,
-                      color: scan.isUploaded ? AppColors.success : AppColors.warning,
+                      color: statusColor,
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      scan.isUploaded ? 'Synced' : 'Local',
+                      statusLabel,
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color: scan.isUploaded ? AppColors.success : AppColors.warning,
+                        color: statusColor,
                       ),
                     ),
                   ],
@@ -505,9 +712,9 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
           ),
           const SizedBox(height: 12),
           _buildInfoRow(
-            Icons.folder_rounded,
-            'File Path',
-            scan.filePath ?? 'Not available',
+            Icons.security_rounded,
+            'Storage',
+            'Encrypted AES-256 (Local)',
             subtitleColor,
           ),
         ],
@@ -544,15 +751,13 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
   }
 
   Widget _buildStatsGrid(
-    ScanModel scan,
+    ScanSession scan,
     Color cardColor,
     Color textColor,
     Color subtitleColor,
   ) {
-    final metadata = scan.metadata ?? {};
-    final points = metadata['points'] ?? 0;
-    final duration = metadata['duration'] ?? 0;
-    final coverage = metadata['coverage'] ?? 0.0;
+    final points = scan.pointCount;
+    final coverage = scan.coveragePercent * 100;
 
     return Column(
       children: [
@@ -562,7 +767,7 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
               child: _buildStatCard(
                 icon: Icons.high_quality_rounded,
                 label: 'Quality',
-                value: '${(scan.quality * 100).toInt()}%',
+                value: '${(scan.qualityScore * 100).toInt()}%',
                 color: AppColors.success,
                 cardColor: cardColor,
                 textColor: textColor,
@@ -588,7 +793,7 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
               child: _buildStatCard(
                 icon: Icons.scatter_plot_rounded,
                 label: 'Points',
-                value: '${(points / 1000).toStringAsFixed(1)}K',
+                value: points >= 1000 ? '${(points / 1000).toStringAsFixed(1)}K' : '$points',
                 color: AppColors.lavender,
                 cardColor: cardColor,
                 textColor: textColor,
@@ -597,9 +802,9 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: _buildStatCard(
-                icon: Icons.access_time_rounded,
-                label: 'Duration',
-                value: '${duration}s',
+                icon: Icons.layers_rounded,
+                label: 'Segments',
+                value: '${scan.segments?.length ?? 0}',
                 color: AppColors.mint,
                 cardColor: cardColor,
                 textColor: textColor,
@@ -626,7 +831,7 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -638,7 +843,7 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: color, size: 22),
@@ -666,12 +871,12 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
   }
 
   Widget _buildNotesSection(
-    ScanModel scan,
+    ScanSession scan,
     Color cardColor,
     Color textColor,
     Color subtitleColor,
   ) {
-    final notes = scan.metadata?['notes'] ?? '';
+    final notes = scan.metadata['notes'] ?? '';
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -680,7 +885,7 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -717,7 +922,7 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
     );
   }
 
-  Widget _buildActionButtons(ScanModel scan, Color cardColor) {
+  Widget _buildActionButtons(ScanSession scan, Color cardColor) {
     return Column(
       children: [
         _buildActionButton(
@@ -727,27 +932,48 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
           onTap: () => _showEditDialog(scan),
         ),
         const SizedBox(height: 12),
+        // Upload to Vault
+        _buildActionButton(
+          icon: scan.isExported
+              ? Icons.verified_rounded
+              : Icons.cloud_upload_rounded,
+          label: scan.isExported
+              ? 'Already Uploaded ✓'
+              : 'Upload to Vault',
+          color: scan.isExported ? AppColors.success : AppColors.warning,
+          onTap: () async {
+            final result = await Navigator.pushNamed(
+              context,
+              '/scan-vault-upload',
+              arguments: {'session': scan},
+            );
+            if (result == true && mounted) {
+              setState(() {});
+            }
+          },
+        ),
+        const SizedBox(height: 12),
         _buildActionButton(
           icon: Icons.share_rounded,
-          label: 'Share Scan',
+          label: 'Share / Export Scan',
           color: AppColors.lavender,
           onTap: () => _showShareOptions(scan),
         ),
         const SizedBox(height: 12),
-        if (!scan.isUploaded)
+        if (scan.status == ScanStatus.completed)
           _buildActionButton(
-            icon: Icons.cloud_upload_rounded,
-            label: 'Upload to Cloud',
+            icon: Icons.file_download_rounded,
+            label: 'Export Scan Files',
             color: AppColors.success,
             onTap: () {
               Navigator.pushNamed(
                 context,
                 '/scan-upload',
-                arguments: {'scan': scan},
+                arguments: {'session': scan},
               );
             },
           ),
-        if (!scan.isUploaded) const SizedBox(height: 12),
+        if (scan.status == ScanStatus.completed) const SizedBox(height: 12),
         _buildActionButton(
           icon: Icons.delete_rounded,
           label: 'Delete Scan',
@@ -770,9 +996,9 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.3), width: 1),
+          border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
         ),
         child: Row(
           children: [
@@ -780,7 +1006,7 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.2),
+                color: color.withValues(alpha: 0.2),
                 shape: BoxShape.circle,
               ),
               child: Icon(icon, color: color, size: 20),
@@ -803,14 +1029,14 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
     );
   }
 
-  Widget _buildBottomButtons(ScanModel scan, Color cardColor) {
+  Widget _buildBottomButtons(ScanSession scan, Color cardColor) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: cardColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, -4),
           ),
@@ -826,20 +1052,14 @@ class _ScanDetailScreenState extends State<ScanDetailScreen> {
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: AppColors.accentBlue.withOpacity(0.3),
+                  color: AppColors.accentBlue.withValues(alpha: 0.3),
                   blurRadius: 15,
                   offset: const Offset(0, 8),
                 ),
               ],
             ),
             child: ElevatedButton(
-              onPressed: () {
-                Navigator.pushNamed(
-                  context,
-                  '/3d-viewer',
-                  arguments: {'scan': scan},
-                );
-              },
+              onPressed: () => _navigateTo3DViewer(scan),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.transparent,
                 shadowColor: Colors.transparent,

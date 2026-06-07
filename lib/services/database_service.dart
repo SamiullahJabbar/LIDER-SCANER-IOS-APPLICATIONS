@@ -8,8 +8,8 @@ class DatabaseService {
   static Database? _database;
   
   // In-memory storage for Web
-  static List<ScanModel> _webScans = [];
-  static Map<String, String> _webSettings = {};
+  static final List<ScanModel> _webScans = [];
+  static final Map<String, String> _webSettings = {};
 
   DatabaseService._init();
 

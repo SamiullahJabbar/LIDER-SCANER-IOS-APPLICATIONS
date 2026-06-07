@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:animate_do/animate_do.dart';
+import 'package:provider/provider.dart';
 import '../utils/app_colors.dart';
+import '../providers/auth_provider.dart';
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -15,7 +17,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
-  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -26,16 +27,51 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleLogin() async {
     if (_formKey.currentState!.validate()) {
-      setState(() => _isLoading = true);
+      debugPrint('🔵 Login form validated, starting login...');
+      final authProvider = context.read<AuthProvider>();
       
-      // TODO: Implement backend login
-      await Future.delayed(const Duration(seconds: 2));
-      
-      setState(() => _isLoading = false);
-      
-      // Navigate to home screen
+      final success = await authProvider.login(
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+
       if (mounted) {
-        Navigator.pushReplacementNamed(context, '/home');
+        if (success) {
+          debugPrint('✅ Login successful in UI');
+          
+          // Show success message & navigate to home
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('Login successful! Welcome back!'),
+                backgroundColor: Colors.green,
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            );
+
+            // Navigate to home — clear entire stack so user can't go back to login
+            Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+          }
+        } else {
+          debugPrint('❌ Login failed in UI');
+          debugPrint('❌ Error message: ${authProvider.errorMessage}');
+          
+          // Show error message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(authProvider.errorMessage ?? 'Login failed'),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        }
       }
     }
   }
@@ -73,12 +109,15 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: _buildLoginForm(),
                         ),
 
-                        const SizedBox(height: 12),
-
                         // Forgot password
                         FadeInUp(
                           delay: const Duration(milliseconds: 400),
-                          child: _buildForgotPassword(),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              _buildForgotPassword(),
+                            ],
+                          ),
                         ),
 
                         const SizedBox(height: 24),
@@ -137,7 +176,7 @@ class _LoginScreenState extends State<LoginScreen> {
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
-                color: AppColors.primaryBlue.withOpacity(0.3),
+                color: AppColors.primaryBlue.withValues(alpha: 0.3),
                 blurRadius: 20,
                 offset: const Offset(0, 10),
               ),
@@ -301,69 +340,70 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildForgotPassword() {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: TextButton(
-        onPressed: () {
-          // TODO: Implement forgot password
-        },
-        child: Text(
-          'Forgot Password?',
-          style: TextStyle(
-            color: AppColors.accentBlue,
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
+    return TextButton(
+      onPressed: () {
+        // TODO: Implement forgot password
+      },
+      child: Text(
+        'Forgot Password?',
+        style: TextStyle(
+          color: AppColors.accentBlue,
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );
   }
 
   Widget _buildLoginButton() {
-    return Container(
-      width: double.infinity,
-      height: 56,
-      decoration: BoxDecoration(
-        gradient: AppColors.primaryGradient,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primaryBlue.withOpacity(0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: ElevatedButton(
-        onPressed: _isLoading ? null : _handleLogin,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          shape: RoundedRectangleBorder(
+    return Consumer<AuthProvider>(
+      builder: (context, authProvider, child) {
+        return Container(
+          width: double.infinity,
+          height: 56,
+          decoration: BoxDecoration(
+            gradient: AppColors.primaryGradient,
             borderRadius: BorderRadius.circular(16),
-          ),
-        ),
-        child: _isLoading
-            ? const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    Colors.white,
-                  ),
-                ),
-              )
-            : const Text(
-                'Sign In',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                  letterSpacing: 0.5,
-                ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primaryBlue.withValues(alpha: 0.3),
+                blurRadius: 15,
+                offset: const Offset(0, 8),
               ),
-      ),
+            ],
+          ),
+          child: ElevatedButton(
+            onPressed: authProvider.isLoading ? null : _handleLogin,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.transparent,
+              shadowColor: Colors.transparent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+            child: authProvider.isLoading
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Colors.white,
+                      ),
+                    ),
+                  )
+                : const Text(
+                    'Sign In',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+          ),
+        );
+      },
     );
   }
 
@@ -446,7 +486,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         boxShadow: [
           BoxShadow(
-            color: backgroundColor.withOpacity(0.2),
+            color: backgroundColor.withValues(alpha: 0.2),
             blurRadius: 8,
             offset: const Offset(0, 4),
           ),
@@ -464,7 +504,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 width: 24,
                 height: 24,
                 decoration: BoxDecoration(
-                  color: textColor.withOpacity(0.1),
+                  color: textColor.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Center(

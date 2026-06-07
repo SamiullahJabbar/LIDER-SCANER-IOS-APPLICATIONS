@@ -5,7 +5,7 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: ^3.5.3
+  sdk: ^3.8.0
 
 dependencies:
   flutter:
@@ -14,8 +14,17 @@ dependencies:
   # UI
   cupertino_icons: ^1.0.8
   
-  # ARKit for LiDAR scanning (iOS only)
-  arkit_plugin: ^1.2.0
+  # ARKit for LiDAR scanning (iOS only) - REAL AR IMPLEMENTATION
+  arkit_plugin: ^1.0.7
+  
+  # ARCore for Android AR scanning - REAL AR IMPLEMENTATION
+  # arcore_flutter_plugin: ^0.1.0  # Temporarily disabled due to namespace issue
+  
+  # Camera for fallback mode
+  camera: ^0.10.5+5
+  
+  # Vector math for 3D calculations
+  vector_math: ^2.1.4
   
   # 3D model viewing
   model_viewer_plus: ^1.9.2
@@ -26,6 +35,10 @@ dependencies:
   # Local storage
   sqflite: ^2.4.1
   path_provider: ^2.1.1
+  shared_preferences: ^2.2.2
+  
+  # Secure storage for tokens
+  flutter_secure_storage: ^9.0.0
   
   # State management
   provider: ^6.1.1
@@ -43,7 +56,13 @@ dependencies:
   uuid: ^4.2.2
   
   # JSON serialization
-  json_annotation: ^4.9.0
+  json_annotation: ^4.11.0
+  
+  # Device info for detection
+  device_info_plus: ^9.1.1
+  
+  # Device sensors (accelerometer, gyroscope) for real movement tracking
+  sensors_plus: ^4.0.2
   
   # Onboarding
   smooth_page_indicator: ^2.0.1
@@ -54,6 +73,12 @@ dependencies:
   
   # Icons
   flutter_svg: ^2.1.0
+  
+  # Image picker for profile
+  image_picker: ^1.0.7
+
+  # File sharing (OBJ / USDZ export from RealityKit)
+  share_plus: ^10.0.0
 
 dev_dependencies:
   flutter_test:

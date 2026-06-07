@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import '../services/database_service.dart';
+import '../services/local_scan_storage_service.dart';
 
 class ThemeProvider extends ChangeNotifier {
   bool _isDarkMode = false;
-  final DatabaseService _db = DatabaseService.instance;
+  final LocalScanStorageService _storage = LocalScanStorageService.instance;
 
   bool get isDarkMode => _isDarkMode;
 
@@ -12,14 +12,14 @@ class ThemeProvider extends ChangeNotifier {
   }
 
   Future<void> _loadTheme() async {
-    final theme = await _db.getSetting('theme');
+    final theme = await _storage.getSetting('theme');
     _isDarkMode = theme == 'dark';
     notifyListeners();
   }
 
   Future<void> toggleTheme() async {
     _isDarkMode = !_isDarkMode;
-    await _db.saveSetting('theme', _isDarkMode ? 'dark' : 'light');
+    await _storage.saveSetting('theme', _isDarkMode ? 'dark' : 'light');
     notifyListeners();
   }
 

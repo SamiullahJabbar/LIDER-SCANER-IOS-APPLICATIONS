@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../utils/app_colors.dart';
 import '../providers/theme_provider.dart';
+import '../providers/auth_provider.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -15,7 +16,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _autoUpload = false;
   bool _highQualityScans = true;
   String _storageLocation = 'Device';
-  String _scanQuality = 'High';
 
   @override
   Widget build(BuildContext context) {
@@ -251,7 +251,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -299,7 +299,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: AppColors.accentBlue,
+            activeTrackColor: AppColors.accentBlue,
           ),
         ],
       ),
@@ -322,7 +322,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -517,9 +517,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pushReplacementNamed(context, '/login');
+            onPressed: () async {
+              Navigator.pop(context); // close dialog
+              await context.read<AuthProvider>().logout();
+              if (!context.mounted) return;
+              // Clear entire stack and go to login
+              Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
             },
             child: Text(
               'Logout',

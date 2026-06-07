@@ -3,8 +3,7 @@ import 'package:animate_do/animate_do.dart';
 import 'package:provider/provider.dart';
 import '../utils/app_colors.dart';
 import '../providers/theme_provider.dart';
-import '../services/database_service.dart';
-import '../models/scan_model.dart';
+import '../services/local_scan_storage_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,8 +13,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final DatabaseService _db = DatabaseService.instance;
-  List<ScanModel> _recentScans = [];
+  final LocalScanStorageService _storage = LocalScanStorageService.instance;
+  List<ScanSession> _recentScans = [];
   int _totalScans = 0;
   bool _isLoading = true;
 
@@ -125,7 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.1),
+              color: iconColor.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -173,7 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
-    final scans = await _db.getAllScans();
+    final scans = await _storage.getAllSessions();
     setState(() {
       _recentScans = scans.take(5).toList();
       _totalScans = scans.length;
@@ -281,7 +280,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primaryBlue.withOpacity(0.3),
+                      color: AppColors.primaryBlue.withValues(alpha: 0.3),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -323,7 +322,7 @@ class _HomeScreenState extends State<HomeScreen> {
               // Theme toggle
               IconButton(
                 onPressed: () {
-                  print('Theme toggle clicked');
+                  debugPrint('Theme toggle clicked');
                   themeProvider.toggleTheme();
                 },
                 icon: Icon(
@@ -393,6 +392,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildStatsCards() {
+    // Count completed scans
+    final completedCount = _recentScans.where((s) => s.status == ScanStatus.completed || s.status == ScanStatus.exported).length;
+    
     return Padding(
       padding: const EdgeInsets.all(20.0),
       child: Row(
@@ -409,17 +411,17 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: _buildStatCard(
               icon: Icons.storage_rounded,
-              label: 'Storage',
-              value: '2.4 GB',
+              label: 'Local',
+              value: '$_totalScans',
               color: AppColors.mint,
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: _buildStatCard(
-              icon: Icons.cloud_upload_rounded,
-              label: 'Uploaded',
-              value: '${(_totalScans * 0.8).toInt()}',
+              icon: Icons.check_circle_rounded,
+              label: 'Completed',
+              value: '$completedCount',
               color: AppColors.lavender,
             ),
           ),
@@ -441,7 +443,7 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -453,7 +455,7 @@ class _HomeScreenState extends State<HomeScreen> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -495,7 +497,7 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: AppColors.primaryBlue.withOpacity(0.3),
+              color: AppColors.primaryBlue.withValues(alpha: 0.3),
               blurRadius: 20,
               offset: const Offset(0, 10),
             ),
@@ -531,7 +533,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           'Capture 3D space with LiDAR',
                           style: TextStyle(
                             fontSize: 14,
-                            color: Colors.white.withOpacity(0.9),
+                            color: Colors.white.withValues(alpha: 0.9),
                           ),
                         ),
                       ],
@@ -541,7 +543,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     width: 60,
                     height: 60,
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -590,13 +592,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildScanCard(ScanModel scan) {
+  Widget _buildScanCard(ScanSession scan) {
     return InkWell(
       onTap: () {
         Navigator.pushNamed(
           context,
           '/scan-detail',
-          arguments: {'scan': scan},
+          arguments: {'session': scan},
         );
       },
       borderRadius: BorderRadius.circular(16),
@@ -608,7 +610,7 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -644,7 +646,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '${scan.createdAt.day}/${scan.createdAt.month}/${scan.createdAt.year}',
+                    '${scan.createdAt.day}/${scan.createdAt.month}/${scan.createdAt.year} • ${scan.roomType}',
                     style: TextStyle(
                       fontSize: 13,
                       color: AppColors.mediumGray,
@@ -653,12 +655,29 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-            Icon(
-              scan.isUploaded
-                  ? Icons.cloud_done_rounded
-                  : Icons.cloud_upload_outlined,
-              color: scan.isUploaded ? AppColors.success : AppColors.mediumGray,
-              size: 24,
+            // Quality grade badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: scan.qualityScore >= 0.7
+                    ? AppColors.success.withValues(alpha: 0.1)
+                    : scan.qualityScore >= 0.4
+                        ? AppColors.warning.withValues(alpha: 0.1)
+                        : AppColors.error.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '${(scan.qualityScore * 100).toInt()}%',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: scan.qualityScore >= 0.7
+                      ? AppColors.success
+                      : scan.qualityScore >= 0.4
+                          ? AppColors.warning
+                          : AppColors.error,
+                ),
+              ),
             ),
           ],
         ),
@@ -718,7 +737,7 @@ class _HomeScreenState extends State<HomeScreen> {
         shape: BoxShape.circle,
         boxShadow: [
           BoxShadow(
-            color: AppColors.primaryBlue.withOpacity(0.4),
+            color: AppColors.primaryBlue.withValues(alpha: 0.4),
             blurRadius: 15,
             offset: const Offset(0, 8),
           ),
@@ -752,7 +771,7 @@ class _HomeScreenState extends State<HomeScreen> {
         color: navBgColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, -4),
           ),

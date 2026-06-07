@@ -112,7 +112,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   height: 300,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Colors.white.withOpacity(0.1),
+                    color: Colors.white.withValues(alpha: 0.1),
                   ),
                 ),
               );
@@ -135,7 +135,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   height: 400,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Colors.white.withOpacity(0.08),
+                    color: Colors.white.withValues(alpha: 0.08),
                   ),
                 ),
               );
@@ -169,7 +169,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             child: TextButton(
               onPressed: _navigateToLogin,
               style: TextButton.styleFrom(
-                backgroundColor: Colors.white.withOpacity(0.2),
+                backgroundColor: Colors.white.withValues(alpha: 0.2),
                 padding: const EdgeInsets.symmetric(
                   horizontal: 20,
                   vertical: 10,
@@ -233,7 +233,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 16,
-                color: AppColors.white.withOpacity(0.9),
+                color: AppColors.white.withValues(alpha: 0.9),
                 height: 1.6,
                 letterSpacing: 0.2,
               ),
@@ -258,14 +258,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       height: 180,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: Colors.white.withOpacity(0.15),
+        color: Colors.white.withValues(alpha: 0.15),
         border: Border.all(
-          color: Colors.white.withOpacity(0.3),
+          color: Colors.white.withValues(alpha: 0.3),
           width: 2,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.1),
+            color: Colors.black.withValues(alpha: 0.1),
             blurRadius: 30,
             offset: const Offset(0, 10),
           ),
@@ -308,7 +308,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 feature,
                 style: TextStyle(
                   fontSize: 14,
-                  color: AppColors.white.withOpacity(0.85),
+                  color: AppColors.white.withValues(alpha: 0.85),
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -330,7 +330,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             count: onboardingPages.length,
             effect: ExpandingDotsEffect(
               activeDotColor: AppColors.white,
-              dotColor: AppColors.white.withOpacity(0.3),
+              dotColor: AppColors.white.withValues(alpha: 0.3),
               dotHeight: 8,
               dotWidth: 8,
               expansionFactor: 4,
@@ -358,10 +358,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           width: double.infinity,
           height: 60,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.2),
+            color: Colors.white.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(30),
             border: Border.all(
-              color: Colors.white.withOpacity(0.3),
+              color: Colors.white.withValues(alpha: 0.3),
               width: 1.5,
             ),
           ),

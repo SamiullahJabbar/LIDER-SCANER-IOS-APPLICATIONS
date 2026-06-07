@@ -4,6 +4,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../utils/app_colors.dart';
 import '../providers/theme_provider.dart';
 import '../services/platform_service.dart';
+import '../screens/platform_ar_camera_screen.dart';
 
 class NewScanScreen extends StatefulWidget {
   const NewScanScreen({super.key});
@@ -57,20 +58,22 @@ class _NewScanScreenState extends State<NewScanScreen> {
     setState(() => _isCheckingPermissions = false);
 
     if (cameraStatus.isGranted) {
-      // Navigate to camera preview screen
+      // Navigate to platform AR camera screen (real scanning)
       if (mounted) {
-        Navigator.pushNamed(
+        Navigator.push(
           context,
-          '/camera-preview',
-          arguments: {
-            'scanName': _nameController.text.trim(),
-            'roomType': _selectedRoomType,
-          },
+          MaterialPageRoute(
+            builder: (context) => PlatformARCameraScreen(
+              scanName: _nameController.text.trim(),
+              roomType: _selectedRoomType,
+            ),
+          ),
         );
       }
     } else if (cameraStatus.isPermanentlyDenied) {
       _showPermissionDialog();
     } else {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Camera permission is required for scanning'),
@@ -215,7 +218,7 @@ class _NewScanScreenState extends State<NewScanScreen> {
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primaryBlue.withOpacity(0.3),
+                color: AppColors.primaryBlue.withValues(alpha: 0.3),
                 blurRadius: 20,
                 offset: const Offset(0, 10),
               ),
@@ -258,7 +261,7 @@ class _NewScanScreenState extends State<NewScanScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -308,7 +311,7 @@ class _NewScanScreenState extends State<NewScanScreen> {
                 fontWeight: FontWeight.w400,
               ),
               filled: true,
-              fillColor: AppColors.lightGray.withOpacity(0.5),
+              fillColor: AppColors.lightGray.withValues(alpha: 0.5),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: BorderSide.none,
@@ -386,8 +389,8 @@ class _NewScanScreenState extends State<NewScanScreen> {
               boxShadow: [
                 BoxShadow(
                   color: isSelected
-                      ? AppColors.primaryBlue.withOpacity(0.3)
-                      : Colors.black.withOpacity(0.05),
+                      ? AppColors.primaryBlue.withValues(alpha: 0.3)
+                      : Colors.black.withValues(alpha: 0.05),
                   blurRadius: isSelected ? 15 : 10,
                   offset: Offset(0, isSelected ? 8 : 4),
                 ),
@@ -476,7 +479,7 @@ class _NewScanScreenState extends State<NewScanScreen> {
         color: cardColor,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: color.withOpacity(0.2),
+          color: color.withValues(alpha: 0.2),
           width: 1,
         ),
       ),
@@ -486,7 +489,7 @@ class _NewScanScreenState extends State<NewScanScreen> {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
@@ -531,7 +534,7 @@ class _NewScanScreenState extends State<NewScanScreen> {
         color: cardColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, -4),
           ),
@@ -545,7 +548,7 @@ class _NewScanScreenState extends State<NewScanScreen> {
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: AppColors.primaryBlue.withOpacity(0.3),
+                color: AppColors.primaryBlue.withValues(alpha: 0.3),
                 blurRadius: 15,
                 offset: const Offset(0, 8),
               ),

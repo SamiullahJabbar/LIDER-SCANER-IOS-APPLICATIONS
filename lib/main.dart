@@ -9,28 +9,33 @@ import 'screens/settings_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/scan_history_screen.dart';
 import 'screens/new_scan_screen.dart';
-import 'screens/camera_preview_screen.dart';
-import 'screens/live_scanning_screen.dart';
 import 'screens/scan_quality_screen.dart';
 import 'screens/scan_preview_screen.dart';
 import 'screens/viewer_3d_screen.dart';
 import 'screens/scan_upload_screen.dart';
+import 'screens/scan_vault_upload_screen.dart';
 import 'screens/scan_detail_screen.dart';
+import 'screens/platform_ar_camera_screen.dart';
+import 'screens/measurement_result_screen.dart';
 import 'providers/theme_provider.dart';
-import 'services/database_service.dart';
+import 'providers/auth_provider.dart';
+import 'providers/local_scan_provider.dart';
+import 'services/local_scan_storage_service.dart';
 import 'utils/app_colors.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize database (only on mobile platforms)
+
+  debugPrint('🚀 Starting LiDAR Pro Scanner (Offline Mode)...');
+
+  // Initialize local scan storage (SQLite + encrypted file storage)
   try {
-    await DatabaseService.instance.database;
+    await LocalScanStorageService.instance.initialize();
+    debugPrint('✅ Local storage initialized');
   } catch (e) {
-    // Ignore database errors on Web
-    print('Database initialization skipped (Web platform)');
+    debugPrint('⚠️ Storage initialization warning: $e');
   }
-  
+
   // Set status bar style - transparent with light icons
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -39,10 +44,23 @@ void main() async {
       statusBarBrightness: Brightness.dark,
     ),
   );
-  
+
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => ThemeProvider(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) {
+          final auth = AuthProvider();
+          auth.initialize();
+          return auth;
+        }),
+        // Local scan provider — fully offline, no backend
+        ChangeNotifierProvider(create: (_) {
+          final provider = LocalScanProvider();
+          provider.initialize();
+          return provider;
+        }),
+      ],
       child: const MyApp(),
     ),
   );
@@ -188,7 +206,7 @@ class MyApp extends StatelessWidget {
               ),
             ),
           ),
-          home: const OnboardingScreen(),
+          home: const AuthWrapper(),
           routes: {
             '/onboarding': (context) => const OnboardingScreen(),
             '/login': (context) => const LoginScreen(),
@@ -198,15 +216,50 @@ class MyApp extends StatelessWidget {
             '/profile': (context) => const ProfileScreen(),
             '/scan-history': (context) => const ScanHistoryScreen(),
             '/new-scan': (context) => const NewScanScreen(),
-            '/camera-preview': (context) => const CameraPreviewScreen(),
-            '/live-scanning': (context) => const LiveScanningScreen(),
             '/scan-quality': (context) => const ScanQualityScreen(),
             '/scan-preview': (context) => const ScanPreviewScreen(),
             '/3d-viewer': (context) => const Viewer3DScreen(),
             '/scan-upload': (context) => const ScanUploadScreen(),
+            '/scan-vault-upload': (context) => const ScanVaultUploadScreen(),
             '/scan-detail': (context) => const ScanDetailScreen(),
+            '/ar-scan-camera': (context) => const PlatformARCameraScreen(scanName: 'New Scan'),
+            '/measurement-result': (context) => const MeasurementResultScreen(),
           },
         );
+      },
+    );
+  }
+}
+
+class AuthWrapper extends StatefulWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  // initialize() is already called in main() when creating AuthProvider.
+  // Calling it again here is safe (memoized) but unnecessary.
+  // No duplicate init — prevents race condition.
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<AuthProvider>(
+      builder: (context, authProvider, child) {
+        switch (authProvider.status) {
+          case AuthStatus.initial:
+          case AuthStatus.loading:
+            return const Scaffold(
+              body: Center(
+                child: CircularProgressIndicator(),
+              ),
+            );
+          case AuthStatus.authenticated:
+            return const HomeScreen();
+          case AuthStatus.unauthenticated:
+            return const OnboardingScreen();
+        }
       },
     );
   }

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../utils/app_colors.dart';
 import '../providers/theme_provider.dart';
-import '../models/scan_model.dart';
+import '../services/local_scan_storage_service.dart';
 import '../services/platform_service.dart';
 
 class ScanPreviewScreen extends StatefulWidget {
@@ -64,7 +64,7 @@ class _ScanPreviewScreenState extends State<ScanPreviewScreen> with SingleTicker
     final subtitleColor = isDark ? Colors.white70 : AppColors.darkGray;
 
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>? ?? {};
-    final scan = args['scan'] as ScanModel?;
+    final scan = args['scan'] as ScanSession?;
     final coverage = args['coverage'] as double? ?? 0.0;
     final points = args['points'] as int? ?? 0;
     final duration = args['duration'] as int? ?? 0;
@@ -172,7 +172,7 @@ class _ScanPreviewScreenState extends State<ScanPreviewScreen> with SingleTicker
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.success.withOpacity(0.3),
+                    color: AppColors.success.withValues(alpha: 0.3),
                     blurRadius: 30,
                     offset: const Offset(0, 15),
                   ),
@@ -191,7 +191,7 @@ class _ScanPreviewScreenState extends State<ScanPreviewScreen> with SingleTicker
   }
 
   Widget _buildScanInfoCard(
-    ScanModel scan,
+    ScanSession scan,
     Color cardColor,
     Color textColor,
     Color subtitleColor,
@@ -203,7 +203,7 @@ class _ScanPreviewScreenState extends State<ScanPreviewScreen> with SingleTicker
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -282,7 +282,7 @@ class _ScanPreviewScreenState extends State<ScanPreviewScreen> with SingleTicker
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppColors.success.withOpacity(0.1),
+              color: AppColors.success.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -390,7 +390,7 @@ class _ScanPreviewScreenState extends State<ScanPreviewScreen> with SingleTicker
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -402,7 +402,7 @@ class _ScanPreviewScreenState extends State<ScanPreviewScreen> with SingleTicker
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -443,8 +443,8 @@ class _ScanPreviewScreenState extends State<ScanPreviewScreen> with SingleTicker
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: platform.isIOS 
-              ? AppColors.success.withOpacity(0.3)
-              : AppColors.accentBlue.withOpacity(0.3),
+              ? AppColors.success.withValues(alpha: 0.3)
+              : AppColors.accentBlue.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -457,8 +457,8 @@ class _ScanPreviewScreenState extends State<ScanPreviewScreen> with SingleTicker
                 height: 40,
                 decoration: BoxDecoration(
                   color: platform.isIOS 
-                      ? AppColors.success.withOpacity(0.1)
-                      : AppColors.accentBlue.withOpacity(0.1),
+                      ? AppColors.success.withValues(alpha: 0.1)
+                      : AppColors.accentBlue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
@@ -498,91 +498,181 @@ class _ScanPreviewScreenState extends State<ScanPreviewScreen> with SingleTicker
     );
   }
 
-  Widget _buildBottomButtons(Color cardColor, ScanModel scan) {
+  Widget _buildBottomButtons(Color cardColor, ScanSession scan) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: cardColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, -4),
           ),
         ],
       ),
       child: SafeArea(
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // View 3D Button
-            Expanded(
-              child: Container(
-                height: 56,
-                decoration: BoxDecoration(
-                  gradient: AppColors.accentGradient,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.accentBlue.withOpacity(0.3),
-                      blurRadius: 15,
-                      offset: const Offset(0, 8),
+            // Top row: View 3D + Upload to Vault
+            Row(
+              children: [
+                // View 3D Button
+                Expanded(
+                  child: Container(
+                    height: 52,
+                    decoration: BoxDecoration(
+                      gradient: AppColors.accentGradient,
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.accentBlue.withValues(alpha: 0.3),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pushNamed(
-                      context,
-                      '/3d-viewer',
-                      arguments: {'scan': scan},
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.view_in_ar_rounded,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          'View 3D',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                          overflow: TextOverflow.ellipsis,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pushNamed(
+                          context,
+                          '/3d-viewer',
+                          arguments: {'scan': scan},
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
                         ),
                       ),
-                    ],
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.view_in_ar_rounded, color: Colors.white, size: 20),
+                          SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              'View 3D',
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
-              ),
+                const SizedBox(width: 12),
+                // Upload to Vault Button
+                Expanded(
+                  child: Container(
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.warning, width: 1.5),
+                    ),
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pushNamed(
+                          context,
+                          '/scan-vault-upload',
+                          arguments: {'session': scan},
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.cloud_upload_rounded, color: AppColors.warning, size: 20),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              'Upload',
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.warning),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            // Done Button
-            Expanded(
+            const SizedBox(height: 12),
+            // Middle row: Export
+            Row(
+              children: [
+                // Export Button
+                Expanded(
+                  child: Container(
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: AppColors.success.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: AppColors.success, width: 1.5),
+                    ),
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pushNamed(
+                          context,
+                          '/scan-upload',
+                          arguments: {'session': scan},
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.file_download_rounded, color: AppColors.success, size: 20),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              'Export Files',
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.success),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Done Button (full width)
+            SizedBox(
+              width: double.infinity,
+              height: 52,
               child: Container(
-                height: 56,
                 decoration: BoxDecoration(
                   gradient: AppColors.primaryGradient,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(14),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.primaryBlue.withOpacity(0.3),
-                      blurRadius: 15,
-                      offset: const Offset(0, 8),
+                      color: AppColors.primaryBlue.withValues(alpha: 0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
                     ),
                   ],
                 ),
@@ -598,29 +688,18 @@ class _ScanPreviewScreenState extends State<ScanPreviewScreen> with SingleTicker
                     backgroundColor: Colors.transparent,
                     shadowColor: Colors.transparent,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(14),
                     ),
                   ),
-                  child: Row(
+                  child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        Icons.home_rounded,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          'Done',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                      Icon(Icons.home_rounded, color: Colors.white, size: 20),
+                      SizedBox(width: 8),
+                      Text(
+                        'Done — Go Home',
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white),
                       ),
                     ],
                   ),

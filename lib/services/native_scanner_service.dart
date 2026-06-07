@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 
@@ -21,7 +22,7 @@ class NativeScannerService {
       final bool result = await _channel.invokeMethod('isLiDARAvailable');
       return result;
     } catch (e) {
-      print('Error checking LiDAR availability: $e');
+      debugPrint('Error checking LiDAR availability: $e');
       return false;
     }
   }
@@ -32,7 +33,7 @@ class NativeScannerService {
       final bool result = await _channel.invokeMethod('isARCoreSupported');
       return result;
     } catch (e) {
-      print('Error checking ARCore support: $e');
+      debugPrint('Error checking ARCore support: $e');
       return false;
     }
   }
@@ -43,7 +44,7 @@ class NativeScannerService {
       final bool result = await _channel.invokeMethod('initializeARSession');
       return result;
     } catch (e) {
-      print('Error initializing AR session: $e');
+      debugPrint('Error initializing AR session: $e');
       return false;
     }
   }
@@ -54,7 +55,7 @@ class NativeScannerService {
       final bool result = await _channel.invokeMethod('startScanning');
       return result;
     } catch (e) {
-      print('Error starting scan: $e');
+      debugPrint('Error starting scan: $e');
       return false;
     }
   }
@@ -65,7 +66,7 @@ class NativeScannerService {
       final bool result = await _channel.invokeMethod('pauseScanning');
       return result;
     } catch (e) {
-      print('Error pausing scan: $e');
+      debugPrint('Error pausing scan: $e');
       return false;
     }
   }
@@ -76,7 +77,7 @@ class NativeScannerService {
       final bool result = await _channel.invokeMethod('resumeScanning');
       return result;
     } catch (e) {
-      print('Error resuming scan: $e');
+      debugPrint('Error resuming scan: $e');
       return false;
     }
   }
@@ -92,7 +93,7 @@ class NativeScannerService {
         'quality': result['quality'] as double,
       };
     } catch (e) {
-      print('Error stopping scan: $e');
+      debugPrint('Error stopping scan: $e');
       return null;
     }
   }
@@ -122,7 +123,7 @@ class NativeScannerService {
       });
       return filePath;
     } catch (e) {
-      print('Error exporting scan: $e');
+      debugPrint('Error exporting scan: $e');
       return null;
     }
   }
@@ -138,7 +139,7 @@ class NativeScannerService {
         'meshFaces': result['meshFaces'] as int,
       };
     } catch (e) {
-      print('Error getting scan statistics: $e');
+      debugPrint('Error getting scan statistics: $e');
       return null;
     }
   }
@@ -148,7 +149,7 @@ class NativeScannerService {
     try {
       await _channel.invokeMethod('disposeARSession');
     } catch (e) {
-      print('Error disposing AR session: $e');
+      debugPrint('Error disposing AR session: $e');
     }
   }
 }

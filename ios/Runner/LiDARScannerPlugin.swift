@@ -473,7 +473,6 @@ final class ARSessionManager: NSObject, ARSessionDelegate {
                 ] as [String: Any])
                 return
             }
-        }
 
         // 2) Fallback: use depth map + camera intrinsics for unprojection
         if let depthMap = frame.smoothedSceneDepth?.depthMap ?? frame.sceneDepth?.depthMap {

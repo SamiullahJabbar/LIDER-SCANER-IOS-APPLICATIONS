@@ -502,7 +502,7 @@ final class RealityKitSceneManager: NSObject, ARSessionDelegate {
             let midpoint = (start + end) / 2.0
 
             // Cylinder as line — older RealityKit API (iOS 13+)
-            let cylinder = MeshResource.generateCylinder(radius: 0.003, height: length)
+            let cylinder = MeshResource.generateCylinder(height: length, radius: 0.003)
             let line = ModelEntity(mesh: cylinder, materials: [self.lineMaterial])
             line.position = midpoint
             line.name = lineId
@@ -763,7 +763,7 @@ final class RealityKitSceneManager: NSObject, ARSessionDelegate {
                         // Extract face indices via MDLMeshBuffer.map()
                         let faceCount = geometry.faces.count
                         let bytesPerIndex = geometry.faces.bytesPerIndex
-                        let indexDataPtr = geometry.faces.buffer.contents().assumingMemoryBound(to: UInt8.self)
+                        let indexDataPtr = geometry.faces.buffer.contents()
 
                         var indices: [UInt32] = []
                         for i in 0..<(faceCount * 3) {

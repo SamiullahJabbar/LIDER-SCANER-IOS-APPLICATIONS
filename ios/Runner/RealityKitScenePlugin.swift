@@ -1105,7 +1105,7 @@ final class RealityKitSceneManager: NSObject, ARSessionDelegate {
 
 /// Generate a cylinder mesh manually using MeshDescriptor.
 /// RealityKit's built-in `MeshResource.generateCylinder` is iOS 18+ only.
-@available(iOS 13.0, *)
+@available(iOS 15.0, *)
 private func makeCylinderMesh(height: Float, radius: Float, segments: Int = 12) -> MeshResource {
     var meshDesc = MeshDescriptor(name: "cylinder")
 

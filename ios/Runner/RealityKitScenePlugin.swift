@@ -501,8 +501,8 @@ final class RealityKitSceneManager: NSObject, ARSessionDelegate {
             let length = simd_length(diff)
             let midpoint = (start + end) / 2.0
 
-            // Cylinder as line — use `splitFaces` variant available since iOS 13+
-            let cylinder = MeshResource.generateCylinder(height: length, radius: 0.003, splitFaces: true)
+            // Cylinder as line — older RealityKit API (iOS 13+)
+            let cylinder = MeshResource.generateCylinder(radius: 0.003, height: length)
             let line = ModelEntity(mesh: cylinder, materials: [self.lineMaterial])
             line.position = midpoint
             line.name = lineId
@@ -674,8 +674,7 @@ final class RealityKitSceneManager: NSObject, ARSessionDelegate {
 
                 // Write faces
                 let indexBytesPerIndex = faces.bytesPerIndex
-                let facePointer = faces.buffer.buffer.contents()
-                    .advanced(by: faces.buffer.offset)
+                let facePointer = faces.buffer.contents()
 
                 for i in 0..<faceCount {
                     var indices = [Int32](repeating: 0, count: 3)
@@ -721,7 +720,8 @@ final class RealityKitSceneManager: NSObject, ARSessionDelegate {
     }
 
     func exportMeshAsUSDZ(result: @escaping FlutterResult) {
-        guard isInitialized else {
+        // Uses MDLAsset export — works on iOS 15+
+        guard isInitialized, let arView = arView else {
             result(FlutterError(code: "NOT_INITIALIZED",
                                 message: "RealityKit not initialized", details: nil))
             return
@@ -730,147 +730,120 @@ final class RealityKitSceneManager: NSObject, ARSessionDelegate {
         let tempURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("lidar_scan_\(Int(Date().timeIntervalSince1970)).usdz")
 
-        if #available(iOS 18.0, *) {
-            guard let arView = arView else {
-                result(FlutterError(code: "NOT_INITIALIZED",
-                                    message: "ARView not available", details: nil))
-                return
-            }
-            // iOS 18+ native RealityKit export
-            arView.exportScene(to: tempURL, description: nil as String?) { error in
-                if let error = error {
-                    result(FlutterError(code: "EXPORT_FAILED",
-                                        message: error.localizedDescription, details: nil))
-                } else {
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let asset = MDLAsset()
+                var hasGeometry = false
+
+                if let frame = arView.session.currentFrame {
+                    for anchor in frame.anchors {
+                        guard let meshAnchor = anchor as? ARMeshAnchor else { continue }
+                        hasGeometry = true
+                        let geometry = meshAnchor.geometry
+                        let transform = meshAnchor.transform
+                        let vertexCount = geometry.vertices.count
+                        let vertexStride = geometry.vertices.stride
+                        // MTLBuffer.contents() returns raw pointer directly
+                        let vertexBasePtr = geometry.vertices.buffer.contents()
+
+                        // Transform vertices to world space
+                        var worldVertices: [SIMD3<Float>] = []
+                        for i in 0..<vertexCount {
+                            let vPtr = vertexBasePtr.advanced(by: i * vertexStride)
+                                .assumingMemoryBound(to: SIMD3<Float>.self)
+                            let localVertex = vPtr.pointee
+                            let worldVertex = transform * SIMD4<Float>(
+                                localVertex.x, localVertex.y, localVertex.z, 1.0
+                            )
+                            worldVertices.append(SIMD3<Float>(
+                                worldVertex.x, worldVertex.y, worldVertex.z
+                            ))
+                        }
+
+                        // Extract face indices via MDLMeshBuffer.map()
+                        let faceCount = geometry.faces.count
+                        let bytesPerIndex = geometry.faces.bytesPerIndex
+                        let indexDataPtr = geometry.faces.buffer.contents().assumingMemoryBound(to: UInt8.self)
+
+                        var indices: [UInt32] = []
+                        for i in 0..<(faceCount * 3) {
+                            let offset = i * bytesPerIndex
+                            if bytesPerIndex == 2 {
+                                indices.append(UInt32(
+                                    indexDataPtr.advanced(by: offset)
+                                        .assumingMemoryBound(to: UInt16.self).pointee
+                                ))
+                            } else {
+                                indices.append(
+                                    indexDataPtr.advanced(by: offset)
+                                        .assumingMemoryBound(to: UInt32.self).pointee
+                                )
+                            }
+                        }
+
+                        // Create MDLMesh from vertex & index data
+                        let vertexByteCount = worldVertices.count * MemoryLayout<SIMD3<Float>>.stride
+                        let vertexBufData = Data(bytes: worldVertices, count: vertexByteCount)
+                        let vertexBuffer = MDLMeshBufferData(
+                            type: .vertex, data: vertexBufData
+                        )
+
+                        let indexByteCount = indices.count * MemoryLayout<UInt32>.stride
+                        let indexBufData = Data(bytes: indices, count: indexByteCount)
+                        let indexBuffer = MDLMeshBufferData(
+                            type: .index, data: indexBufData
+                        )
+
+                        let submesh = MDLSubmesh(
+                            indexBuffer: indexBuffer,
+                            indexCount: indices.count,
+                            indexType: .uInt32,
+                            geometryType: .triangles,
+                            material: nil
+                        )
+
+                        let vertexDescriptor = MDLVertexDescriptor()
+                        let posAttr = MDLVertexAttribute(
+                            name: MDLVertexAttributePosition,
+                            format: .float3,
+                            offset: 0,
+                            bufferIndex: 0
+                        )
+                        vertexDescriptor.attributes[0] = posAttr
+                        vertexDescriptor.layouts[0] = MDLVertexBufferLayout(
+                            stride: MemoryLayout<SIMD3<Float>>.stride
+                        )
+
+                        let mesh = MDLMesh(
+                            vertexBuffer: vertexBuffer,
+                            vertexCount: worldVertices.count,
+                            descriptor: vertexDescriptor,
+                            submeshes: [submesh]
+                        )
+                        asset.add(mesh)
+                    }
+                }
+
+                if !hasGeometry {
+                    throw NSError(
+                        domain: "com.lidarscanner",
+                        code: -1,
+                        userInfo: [NSLocalizedDescriptionKey: "No mesh geometry available for export"]
+                    )
+                }
+
+                try asset.export(to: tempURL)
+
+                DispatchQueue.main.async {
                     result([
                         "filePath": tempURL.path,
                         "fileSize": (try? FileManager.default.attributesOfItem(atPath: tempURL.path)[.size] as? Int) ?? 0
                     ] as [String: Any])
                 }
-            }
-        } else {
-            // iOS 15-17: Export using MDLAsset from ARKit mesh anchors
-            guard let arView = arView else {
-                result(FlutterError(code: "NOT_INITIALIZED",
-                                    message: "ARView not available", details: nil))
-                return
-            }
-
-            DispatchQueue.global(qos: .userInitiated).async {
-                do {
-                    let asset = MDLAsset()
-                    var hasGeometry = false
-
-                    if let frame = arView.session.currentFrame {
-                        for anchor in frame.anchors {
-                            guard let meshAnchor = anchor as? ARMeshAnchor else { continue }
-                            hasGeometry = true
-                            let geometry = meshAnchor.geometry
-                            let transform = meshAnchor.transform
-                            let vertexCount = geometry.vertices.count
-                            let vertexStride = geometry.vertices.stride
-                            let vertexBufferPtr = geometry.vertices.buffer.buffer.contents()
-
-                            // Transform vertices to world space
-                            var worldVertices: [SIMD3<Float>] = []
-                            for i in 0..<vertexCount {
-                                let vPtr = vertexBufferPtr.advanced(by: i * vertexStride)
-                                    .assumingMemoryBound(to: SIMD3<Float>.self)
-                                let localVertex = vPtr.pointee
-                                let worldVertex = transform * SIMD4<Float>(
-                                    localVertex.x, localVertex.y, localVertex.z, 1.0
-                                )
-                                worldVertices.append(SIMD3<Float>(
-                                    worldVertex.x, worldVertex.y, worldVertex.z
-                                ))
-                            }
-
-                            // Extract face indices
-                            let faceCount = geometry.faces.count
-                            let bytesPerIndex = geometry.faces.bytesPerIndex
-                            let indexMap = geometry.faces.buffer.map()
-                            let indexDataPtr = indexMap.data.assumingMemoryBound(to: UInt8.self)
-
-                            var indices: [UInt32] = []
-                            for i in 0..<(faceCount * 3) {
-                                let offset = i * bytesPerIndex
-                                if bytesPerIndex == 2 {
-                                    indices.append(UInt32(
-                                        indexDataPtr.advanced(by: offset)
-                                            .assumingMemoryBound(to: UInt16.self).pointee
-                                    ))
-                                } else {
-                                    indices.append(
-                                        indexDataPtr.advanced(by: offset)
-                                            .assumingMemoryBound(to: UInt32.self).pointee
-                                    )
-                                }
-                            }
-
-                            // Create MDLMesh from vertex & index data
-                            let vertexByteCount = worldVertices.count * MemoryLayout<SIMD3<Float>>.stride
-                            let vertexBufData = Data(bytes: worldVertices, count: vertexByteCount)
-                            let vertexBuffer = MDLMeshBufferData(
-                                type: .vertex, data: vertexBufData
-                            )
-
-                            let indexByteCount = indices.count * MemoryLayout<UInt32>.stride
-                            let indexBufData = Data(bytes: indices, count: indexByteCount)
-                            let indexBuffer = MDLMeshBufferData(
-                                type: .index, data: indexBufData
-                            )
-
-                            let submesh = MDLSubmesh(
-                                indexBuffer: indexBuffer,
-                                indexCount: indices.count,
-                                indexType: .uInt32,
-                                geometryType: .triangles,
-                                material: nil
-                            )
-
-                            let vertexDescriptor = MDLVertexDescriptor()
-                            let posAttr = MDLVertexAttribute(
-                                name: MDLVertexAttributePosition,
-                                format: .float3,
-                                offset: 0,
-                                bufferIndex: 0
-                            )
-                            vertexDescriptor.attributes[0] = posAttr
-                            vertexDescriptor.layouts[0] = MDLVertexBufferLayout(
-                                stride: MemoryLayout<SIMD3<Float>>.stride
-                            )
-
-                            let mesh = MDLMesh(
-                                vertexBuffer: vertexBuffer,
-                                vertexCount: worldVertices.count,
-                                descriptor: vertexDescriptor,
-                                submeshes: [submesh]
-                            )
-                            asset.add(mesh)
-                        }
-                    }
-
-                    if !hasGeometry {
-                        throw NSError(
-                            domain: "com.lidarscanner",
-                            code: -1,
-                            userInfo: [NSLocalizedDescriptionKey: "No mesh geometry available for export"]
-                        )
-                    }
-
-                    try asset.export(to: tempURL)
-
-                    DispatchQueue.main.async {
-                        result([
-                            "filePath": tempURL.path,
-                            "fileSize": (try? FileManager.default.attributesOfItem(atPath: tempURL.path)[.size] as? Int) ?? 0
-                        ] as [String: Any])
-                    }
-                } catch {
-                    DispatchQueue.main.async {
-                        result(FlutterError(code: "EXPORT_FAILED",
-                                            message: error.localizedDescription, details: nil))
-                    }
+            } catch {
+                DispatchQueue.main.async {
+                    result(FlutterError(code: "EXPORT_FAILED",
+                                        message: error.localizedDescription, details: nil))
                 }
             }
         }

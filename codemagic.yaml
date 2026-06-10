@@ -34,9 +34,23 @@ workflows:
         script: |
           VERSION=$(grep '^version: ' pubspec.yaml | cut -d' ' -f2 | cut -d'+' -f1)
           BN=$(date +%Y%m%d%H%M)
+          
           flutter build ipa --release --no-codesign \
             --build-name=${VERSION:-1.0.0} \
             --build-number=${BN:-1}
+          
+          # .xcarchive se .ipa banao
+          APP_PATH=$(find build/ios/archive -name "*.xcarchive" | head -1)
+          APP_BUNDLE=$(find "$APP_PATH/Products/Applications" -name "*.app" | head -1)
+          
+          mkdir -p build/ios/ipa/Payload
+          cp -r "$APP_BUNDLE" build/ios/ipa/Payload/
+          
+          cd build/ios/ipa
+          zip -r "LidarProScanner_${VERSION:-1.0.0}_${BN}.ipa" Payload/
+          rm -rf Payload/
+          
+          echo "✅ IPA ready: LidarProScanner_${VERSION:-1.0.0}_${BN}.ipa"
     
     artifacts:
       - build/ios/ipa/*.ipa
